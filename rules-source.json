@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "targets": {
+    "DIRECT": "DIRECT",
+    "SEA": "🌏 东南节点",
+    "US": "🇺🇸 美国节点"
+  },
+  "groups": [
+    {
+      "target": "SEA",
+      "pattern": "(新加坡|SG|Singapore|马来西亚|MY|Malaysia|台湾|TW|Taiwan)",
+      "flags": "i",
+      "url": "http://cp.cloudflare.com/generate_204",
+      "interval": 30,
+      "tolerance": 10,
+      "fallback": "DIRECT"
+    },
+    {
+      "target": "US",
+      "pattern": "(美国|US|America|States)",
+      "flags": "i",
+      "url": "http://www.gstatic.com/generate_204",
+      "interval": 30,
+      "tolerance": 10,
+      "fallback": "DIRECT"
+    }
+  ],
+  "rule_sets": {
+    "ai": [
+      "claude.ai",
+      "anthropic.com",
+      "claudeusercontent.com",
+      "gemini.google.com",
+      "openai.com",
+      "chatgpt.com",
+      "oaistatic.com",
+      "oaiusercontent.com",
+      "api.openai.com",
+      "perplexity.ai"
+    ],
+    "apple": [
+      "apple-relay.akamaized.net",
+      "apple-relay.apple.com",
+      "apple-relay.cloudflare.com",
+      "apple-relay.fastly-edge.com",
+      "apple-relay.mask.apple-dns.net",
+      "apple.com",
+      "icloud.com"
+    ],
+    "netflix": [
+      "netflix.com",
+      "netflix.net",
+      "nflximg.net",
+      "nflxvideo.net",
+      "nflxso.net",
+      "nflxext.com",
+      "fast.com"
+    ],
+    "stream": [
+      "tiktok.com",
+      "tiktokv.com",
+      "tiktokcdn.com",
+      "musical.ly",
+      "muscdn.com",
+      "youtu.be",
+      "ytimg.com",
+      "youtube.com"
+    ],
+    "google": [
+      "googleapis.com",
+      "gstatic.com",
+      "google.com",
+      "googlevideo.com",
+      "ggpht.com",
+      "googleusercontent.com"
+    ],
+    "line": [
+      "line.naver.jp",
+      "line.me",
+      "line-apps.com",
+      "line-cdn.net",
+      "line-scdn.net"
+    ]
+  },
+  "routes": [
+    {
+      "name": "Apple",
+      "target": "DIRECT",
+      "domain_sets": ["apple"],
+      "keywords": ["apple"]
+    },
+    {
+      "name": "指定 IP / US",
+      "target": "US",
+      "cidrs": [
+        "180.109.192.57/32",
+        "172.20.10.1/32",
+        "17.57.145.154/32"
+      ]
+    },
+    {
+      "name": "AI",
+      "target": "SEA",
+      "domain_sets": ["ai"]
+    },
+    {
+      "name": "Daily / SEA",
+      "target": "SEA",
+      "domains": [
+        "atlassian.com",
+        "okx.com"
+      ]
+    },
+    {
+      "name": "GitHub",
+      "target": "US",
+      "domains": ["github.com"]
+    },
+    {
+      "name": "LINE",
+      "target": "SEA",
+      "domain_sets": ["line"],
+      "keywords": ["line"]
+    },
+    {
+      "name": "Steam",
+      "target": "SEA",
+      "domains": [
+        "steampowered.com",
+        "gameanalytics.com",
+        "t17service.com",
+        "964nzttlu1.execute-api.eu-west-1.amazonaws.com"
+      ],
+      "cidrs": [
+        "59.37.139.7/32",
+        "3.249.107.252/32"
+      ]
+    },
+    {
+      "name": "Netflix",
+      "target": "SEA",
+      "domain_sets": ["netflix"],
+      "keywords": ["netflix"]
+    },
+    {
+      "name": "Stream",
+      "target": "SEA",
+      "domain_sets": ["stream"],
+      "keywords": ["tiktok"]
+    },
+    {
+      "name": "Google",
+      "target": "US",
+      "domain_sets": ["google"],
+      "keywords": [
+        "google",
+        "antigravity"
+      ]
+    },
+    {
+      "name": "Direct",
+      "target": "DIRECT",
+      "geoips": ["CN"],
+      "domains": [
+        "1password.com",
+        "immersivetranslate.com",
+        "luyuyun.net",
+        "luyuyun.cc",
+        "itssx.com",
+        "csust.edu.cn",
+        "openrouter.ai"
+      ],
+      "cidrs": [
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "169.254.0.0/16",
+        "100.64.0.0/10",
+        "224.0.0.0/4",
+        "240.0.0.0/4",
+        "114.66.28.123/32",
+        "10.255.255.0/24"
+      ]
+    }
+  ],
+  "final": "SEA"
+}

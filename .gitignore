@@ -1,2 +1,4 @@
-__pycache__/clash_shadowrocket_rules.cpython-314.pyc
+*.pyc
 clash.yaml
+shadowrocket.conf
+clash.js
