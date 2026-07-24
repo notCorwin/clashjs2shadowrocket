@@ -137,6 +137,32 @@ def validate_source(source: dict[str, Any]) -> None:
     if final not in group_targets and targets[final] not in {"DIRECT", "REJECT"}:
         raise ValueError(f"final 没有对应策略组：{final}")
 
+    dns = source.get("shadowrocket_dns")
+    if not isinstance(dns, dict):
+        raise ValueError("shadowrocket_dns 必须是对象")
+    if not isinstance(dns.get("ipv6"), bool):
+        raise ValueError("shadowrocket_dns.ipv6 必须是布尔值")
+    if not isinstance(dns.get("private_ip_answer"), bool):
+        raise ValueError("shadowrocket_dns.private_ip_answer 必须是布尔值")
+    for key in ("servers", "fallback_servers", "proxy_servers", "always_real_ip"):
+        if not require_strings(dns.get(key), f"shadowrocket_dns.{key}"):
+            raise ValueError(f"shadowrocket_dns.{key} 不能为空")
+
+    host_servers = dns.get("host_servers")
+    if not isinstance(host_servers, list) or not host_servers:
+        raise ValueError("shadowrocket_dns.host_servers 必须是非空数组")
+    for index, mapping in enumerate(host_servers):
+        location = f"shadowrocket_dns.host_servers[{index}]"
+        if not isinstance(mapping, dict):
+            raise ValueError(f"{location} 必须是对象")
+        if not require_strings(mapping.get("patterns"), f"{location}.patterns"):
+            raise ValueError(f"{location}.patterns 不能为空")
+        server = mapping.get("server")
+        if not isinstance(server, str) or not server:
+            raise ValueError(f"{location}.server 必须是非空字符串")
+        if any(character in server for character in ",\r\n"):
+            raise ValueError(f"{location}.server 不能包含逗号或换行")
+
 
 def expanded_routes(source: dict[str, Any]) -> list[dict[str, Any]]:
     result = []
@@ -270,9 +296,18 @@ def shadowrocket_pattern(group: dict[str, Any]) -> str:
 
 
 def render_shadowrocket(source: dict[str, Any]) -> str:
+    dns = source["shadowrocket_dns"]
     lines = [
         SHADOWROCKET_MARKER,
         "# Clash 在零匹配时回退 DIRECT；Shadowrocket 静态策略组无等价条件分支。",
+        "",
+        "[General]",
+        f"ipv6 = {str(dns['ipv6']).lower()}",
+        f"private-ip-answer = {str(dns['private_ip_answer']).lower()}",
+        f"dns-server = {','.join(dns['servers'])}",
+        f"fallback-dns-server = {','.join(dns['fallback_servers'])}",
+        f"proxy-dns-server = {','.join(dns['proxy_servers'])}",
+        f"always-real-ip = {','.join(dns['always_real_ip'])}",
         "",
         "[Proxy Group]",
     ]
@@ -295,6 +330,11 @@ def render_shadowrocket(source: dict[str, Any]) -> str:
             lines.append(f"# {route_name}")
         lines.append(rule)
         previous_route = route_name
+
+    lines.extend(["", "[Host]"])
+    for mapping in dns["host_servers"]:
+        for pattern in mapping["patterns"]:
+            lines.append(f"{pattern} = server:{mapping['server']}")
     return "\n".join(lines) + "\n"
 
 
@@ -320,6 +360,11 @@ def self_test(source: dict[str, Any]) -> None:
     assert clash_rules == expected
     assert "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve" in shadowrocket
     assert f"FINAL,{source['targets'][source['final']]}" in shadowrocket
+    assert (
+        "fallback-dns-server = 10.255.255.25,10.255.255.26,"
+        "https://1.1.1.1/dns-query,https://dns.google/dns-query"
+    ) in shadowrocket
+    assert "*.csust.edu.cn = server:10.255.255.25" in shadowrocket
     assert len(expected) == 80
 
 
@@ -331,7 +376,7 @@ def main() -> int:
         self_test(source)
 
         if sys.argv[1:] == ["--check"]:
-            print("检查通过：规则源有效，80 条规则双端语义一致")
+            print("检查通过：规则源有效，80 条规则和 Shadowrocket DNS 配置有效")
             return 0
         if sys.argv[1:]:
             raise ValueError("无需输入参数；可选参数只有 --check")
