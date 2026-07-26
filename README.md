@@ -24,3 +24,7 @@ python3 -m http.server 8000
 python3 rules_generator.py --check
 python3 rules_generator.py
 ```
+
+## DNS 策略
+
+`rules-source.json` 中的 `mihomo_dns` 会写入 Clash JS，使用国内 DoH 作为主解析、Cloudflare/Google DoH 作为 Fallback，并单独配置代理节点引导解析；局域网和直连域名保留系统解析以兼容路由器及内网服务。`shadowrocket_dns` 会生成相同取舍的 `dns-server`、`fallback-dns-server` 和 `proxy-dns-server`，同时关闭系统 DNS 回退、关闭 IPv6 DNS 响应，并劫持常见硬编码 DNS，减少明文 DNS 泄漏。

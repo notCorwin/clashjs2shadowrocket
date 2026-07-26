@@ -51,13 +51,15 @@ function renderClash(data) {
     target: group.target, pattern: group.pattern, flags: group.flags || "",
     url: group.url, interval: group.interval, tolerance: group.tolerance, fallback: group.fallback,
   }));
-  return `${marker("clash")}\n\nconst TARGETS = Object.freeze(${JSON.stringify(data.targets, null, 2)});\nconst GROUP_CONFIGS = ${JSON.stringify(groups, null, 2)};\nconst ROUTES = ${JSON.stringify(expandedRoutes(data), null, 2)};\nconst FINAL_TARGET = ${JSON.stringify(data.final)};\n\nfunction compileRoute(route) {\n  const target = TARGETS[route.target];\n  return [\n    ...(route.geoips || []).map((value) => \`GEOIP,\${value},\${target}\`),\n    ...(route.domains || []).map((value) => \`DOMAIN-SUFFIX,\${value},\${target}\`),\n    ...(route.keywords || []).map((value) => \`DOMAIN-KEYWORD,\${value},\${target}\`),\n    ...(route.cidrs || []).map((value) => \`IP-CIDR,\${value},\${target},no-resolve\`),\n  ];\n}\n\nfunction buildProxyGroups(proxies) {\n  return GROUP_CONFIGS.map((group) => {\n    const match = new RegExp(group.pattern, group.flags);\n    const matchedProxies = proxies.filter((proxy) => match.test(proxy.name)).map((proxy) => proxy.name);\n    return { name: TARGETS[group.target], type: "url-test", url: group.url, interval: group.interval, tolerance: group.tolerance, proxies: matchedProxies.length ? matchedProxies : [TARGETS[group.fallback]] };\n  });\n}\n\nfunction main(config) {\n  config["proxy-groups"] ||= [];\n  config["proxy-groups"].unshift(...buildProxyGroups(config.proxies || []));\n  config.rules = [...ROUTES.flatMap(compileRoute), \`MATCH,\${TARGETS[FINAL_TARGET]}\`, ...(config.rules || [])];\n  return config;\n}\n`;
+  return `${marker("clash")}\n\nconst TARGETS = Object.freeze(${JSON.stringify(data.targets, null, 2)});\nconst GROUP_CONFIGS = ${JSON.stringify(groups, null, 2)};\nconst ROUTES = ${JSON.stringify(expandedRoutes(data), null, 2)};\nconst FINAL_TARGET = ${JSON.stringify(data.final)};\nconst DNS_CONFIG = ${JSON.stringify(data.mihomo_dns, null, 2)};\n\nfunction compileRoute(route) {\n  const target = TARGETS[route.target];\n  return [\n    ...(route.geoips || []).map((value) => \`GEOIP,\${value},\${target}\`),\n    ...(route.domains || []).map((value) => \`DOMAIN-SUFFIX,\${value},\${target}\`),\n    ...(route.keywords || []).map((value) => \`DOMAIN-KEYWORD,\${value},\${target}\`),\n    ...(route.cidrs || []).map((value) => \`IP-CIDR,\${value},\${target},no-resolve\`),\n  ];\n}\n\nfunction buildProxyGroups(proxies) {\n  return GROUP_CONFIGS.map((group) => {\n    const match = new RegExp(group.pattern, group.flags);\n    const matchedProxies = proxies.filter((proxy) => match.test(proxy.name)).map((proxy) => proxy.name);\n    return { name: TARGETS[group.target], type: "url-test", url: group.url, interval: group.interval, tolerance: group.tolerance, proxies: matchedProxies.length ? matchedProxies : [TARGETS[group.fallback]] };\n  });\n}\n\nfunction main(config) {\n  config["proxy-groups"] ||= [];\n  config["proxy-groups"].unshift(...buildProxyGroups(config.proxies || []));\n  config.dns = DNS_CONFIG;\n  config.rules = [...ROUTES.flatMap(compileRoute), \`MATCH,\${TARGETS[FINAL_TARGET]}\`, ...(config.rules || [])];\n  return config;\n}\n`;
 }
 
 function renderShadowrocket(data) {
   const dns = data.shadowrocket_dns;
   const lines = [marker("shadowrocket"), "# Clash 在零匹配时回退到 fallback；Shadowrocket 使用静态策略组。", "", "[General]",
-    `ipv6 = ${dns.ipv6}`, `private-ip-answer = ${dns.private_ip_answer}`, `dns-server = ${dns.servers.join(",")}`,
+    `ipv6 = ${dns.ipv6}`, `prefer-ipv6 = ${dns.prefer_ipv6}`, `private-ip-answer = ${dns.private_ip_answer}`,
+    `dns-direct-system = ${dns.dns_direct_system}`, `dns-direct-fallback-proxy = ${dns.dns_direct_fallback_proxy}`,
+    `hijack-dns = ${dns.hijack_dns.join(",")}`, `dns-server = ${dns.servers.join(",")}`,
     `fallback-dns-server = ${dns.fallback_servers.join(",")}`, `proxy-dns-server = ${dns.proxy_servers.join(",")}`,
     `always-real-ip = ${dns.always_real_ip.join(",")}`, "", "[Proxy Group]"];
   for (const group of data.groups) lines.push(`${data.targets[group.target]} = url-test,url=${group.url},interval=${group.interval},tolerance=${group.tolerance},policy-regex-filter=${group.flags === "i" ? "(?i)" : ""}${group.pattern}`);
@@ -114,7 +116,17 @@ function validate(data) {
     for (const geoip of item.geoips || []) if (!/^[A-Z]{2}$/i.test(geoip)) throw new Error(`GeoIP 无效：${geoip}`);
   }
   if (!data.targets[data.final]) throw new Error("final 引用了未知策略");
-  if (!data.shadowrocket_dns) throw new Error("缺少 shadowrocket_dns 配置");
+  const mihomoDns = data.mihomo_dns;
+  if (!mihomoDns || typeof mihomoDns !== "object") throw new Error("缺少 mihomo_dns 配置");
+  if (mihomoDns.enable !== true || !["arc", "lru"].includes(mihomoDns["cache-algorithm"]) || !["fake-ip", "redir-host"].includes(mihomoDns["enhanced-mode"])) throw new Error("mihomo_dns 基础配置无效");
+  for (const field of ["default-nameserver", "fake-ip-filter", "nameserver", "fallback", "proxy-server-nameserver", "direct-nameserver"]) if (!Array.isArray(mihomoDns[field]) || mihomoDns[field].some((value) => typeof value !== "string" || !value || /[,\r\n]/.test(value))) throw new Error(`mihomo_dns.${field} 配置无效`);
+  const fallbackFilter = mihomoDns["fallback-filter"];
+  if (!fallbackFilter || fallbackFilter.geoip !== true || !/^[A-Z]{2}$/i.test(fallbackFilter["geoip-code"] || "") || !Array.isArray(fallbackFilter.geosite) || !Array.isArray(fallbackFilter.ipcidr) || !Array.isArray(fallbackFilter.domain)) throw new Error("mihomo_dns.fallback-filter 配置无效");
+  const dns = data.shadowrocket_dns;
+  if (!dns || typeof dns !== "object") throw new Error("缺少 shadowrocket_dns 配置");
+  for (const field of ["ipv6", "prefer_ipv6", "private_ip_answer", "dns_direct_system", "dns_direct_fallback_proxy"]) if (typeof dns[field] !== "boolean") throw new Error(`shadowrocket_dns.${field} 必须是布尔值`);
+  for (const field of ["servers", "fallback_servers", "proxy_servers", "always_real_ip", "hijack_dns"]) if (!Array.isArray(dns[field]) || !dns[field].length || dns[field].some((value) => typeof value !== "string" || !value || /[,\r\n]/.test(value))) throw new Error(`shadowrocket_dns.${field} 配置无效`);
+  if (!Array.isArray(dns.host_servers) || !dns.host_servers.length) throw new Error("shadowrocket_dns.host_servers 配置无效");
 }
 
 function render() {

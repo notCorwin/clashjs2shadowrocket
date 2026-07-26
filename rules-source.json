@@ -160,18 +160,94 @@
     { "name": "Steam", "target": "SEA", "domains": ["steampowered.com", "gameanalytics.com", "t17service.com", "964nzttlu1.execute-api.eu-west-1.amazonaws.com"], "cidrs": ["59.37.139.7/32", "3.249.107.252/32"] },
     { "name": "中国大陆直连", "target": "DIRECT", "geoips": ["CN"] }
   ],
+  "mihomo_dns": {
+    "enable": true,
+    "cache-algorithm": "arc",
+    "prefer-h3": false,
+    "use-hosts": true,
+    "use-system-hosts": true,
+    "respect-rules": false,
+    "ipv6": false,
+    "default-nameserver": [
+      "223.5.5.5",
+      "119.29.29.29"
+    ],
+    "enhanced-mode": "fake-ip",
+    "fake-ip-range": "198.18.0.1/16",
+    "fake-ip-filter": [
+      "*.lan",
+      "*.local",
+      "*.localhost",
+      "+.internal",
+      "+.localdomain",
+      "+.home.arpa",
+      "+.arpa",
+      "time.*.com",
+      "ntp.*.com",
+      "localhost.ptlogin2.qq.com",
+      "*.msftconnecttest.com",
+      "www.msftconnecttest.com",
+      "+.stun.*",
+      "stun.*",
+      "*.srv.nintendo.net",
+      "*.stun.playstation.net",
+      "xbox.*.microsoft.com",
+      "*.xboxlive.com"
+    ],
+    "nameserver": [
+      "https://doh.pub/dns-query",
+      "https://dns.alidns.com/dns-query"
+    ],
+    "fallback": [
+      "https://1.1.1.1/dns-query",
+      "https://dns.google/dns-query"
+    ],
+    "proxy-server-nameserver": [
+      "https://doh.pub/dns-query",
+      "https://dns.alidns.com/dns-query"
+    ],
+    "direct-nameserver": [
+      "system"
+    ],
+    "direct-nameserver-follow-policy": false,
+    "fallback-filter": {
+      "geoip": true,
+      "geoip-code": "CN",
+      "geosite": [
+        "gfw"
+      ],
+      "ipcidr": [
+        "240.0.0.0/4"
+      ],
+      "domain": [
+        "+.google.com",
+        "+.youtube.com",
+        "+.facebook.com",
+        "+.twitter.com",
+        "+.github.com",
+        "+.githubusercontent.com",
+        "+.openai.com",
+        "+.chatgpt.com"
+      ]
+    }
+  },
   "shadowrocket_dns": {
-    "ipv6": true,
+    "ipv6": false,
+    "prefer_ipv6": false,
     "private_ip_answer": true,
-    "servers": [
+    "dns_direct_system": false,
+    "dns_direct_fallback_proxy": true,
+    "hijack_dns": [
       "8.8.8.8",
-      "https://dns.google/dns-query",
+      "8.8.4.4",
+      "1.1.1.1",
+      "1.0.0.1"
+    ],
+    "servers": [
       "https://doh.pub/dns-query",
       "https://dns.alidns.com/dns-query"
     ],
     "fallback_servers": [
-      "10.255.255.25",
-      "10.255.255.26",
       "https://1.1.1.1/dns-query",
       "https://dns.google/dns-query"
     ],

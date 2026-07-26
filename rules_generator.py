@@ -179,14 +179,32 @@ def validate_source(source: dict[str, Any]) -> None:
     if final not in group_targets and targets[final] not in {"DIRECT", "REJECT"}:
         raise ValueError(f"final 没有对应策略组：{final}")
 
+    mihomo_dns = source.get("mihomo_dns")
+    if not isinstance(mihomo_dns, dict):
+        raise ValueError("mihomo_dns 必须是对象")
+    if mihomo_dns.get("enable") is not True:
+        raise ValueError("mihomo_dns.enable 必须为 true")
+    if mihomo_dns.get("cache-algorithm") not in {"arc", "lru"}:
+        raise ValueError("mihomo_dns.cache-algorithm 无效")
+    if mihomo_dns.get("enhanced-mode") not in {"fake-ip", "redir-host"}:
+        raise ValueError("mihomo_dns.enhanced-mode 无效")
+    for key in ("default-nameserver", "fake-ip-filter", "nameserver", "fallback", "proxy-server-nameserver", "direct-nameserver"):
+        if not require_strings(mihomo_dns.get(key), f"mihomo_dns.{key}"):
+            raise ValueError(f"mihomo_dns.{key} 不能为空")
+    fallback_filter = mihomo_dns.get("fallback-filter")
+    if not isinstance(fallback_filter, dict) or fallback_filter.get("geoip") is not True or not re.fullmatch(r"[A-Za-z]{2}", str(fallback_filter.get("geoip-code", ""))):
+        raise ValueError("mihomo_dns.fallback-filter 基础配置无效")
+    for key in ("geosite", "ipcidr", "domain"):
+        if not require_strings(fallback_filter.get(key), f"mihomo_dns.fallback-filter.{key}"):
+            raise ValueError(f"mihomo_dns.fallback-filter.{key} 不能为空")
+
     dns = source.get("shadowrocket_dns")
     if not isinstance(dns, dict):
         raise ValueError("shadowrocket_dns 必须是对象")
-    if not isinstance(dns.get("ipv6"), bool):
-        raise ValueError("shadowrocket_dns.ipv6 必须是布尔值")
-    if not isinstance(dns.get("private_ip_answer"), bool):
-        raise ValueError("shadowrocket_dns.private_ip_answer 必须是布尔值")
-    for key in ("servers", "fallback_servers", "proxy_servers", "always_real_ip"):
+    for key in ("ipv6", "prefer_ipv6", "private_ip_answer", "dns_direct_system", "dns_direct_fallback_proxy"):
+        if not isinstance(dns.get(key), bool):
+            raise ValueError(f"shadowrocket_dns.{key} 必须是布尔值")
+    for key in ("servers", "fallback_servers", "proxy_servers", "always_real_ip", "hijack_dns"):
         if not require_strings(dns.get(key), f"shadowrocket_dns.{key}"):
             raise ValueError(f"shadowrocket_dns.{key} 不能为空")
 
@@ -279,6 +297,7 @@ def render_clash(source: dict[str, Any]) -> str:
     groups = json.dumps(source["groups"], ensure_ascii=False, indent=2)
     routes = json.dumps(expanded_routes(source), ensure_ascii=False, indent=2)
     final = json.dumps(source["final"], ensure_ascii=False)
+    dns = json.dumps(source["mihomo_dns"], ensure_ascii=False, indent=2)
 
     return f"""{CLASH_MARKER}
 
@@ -286,6 +305,7 @@ const TARGETS = Object.freeze({targets});
 const GROUP_CONFIGS = {groups};
 const ROUTES = {routes};
 const FINAL_TARGET = {final};
+const DNS_CONFIG = {dns};
 
 function compileRoute(route) {{
   const target = TARGETS[route.target];
@@ -338,6 +358,7 @@ function main(config) {{
   }}
 
   config["proxy-groups"].unshift(...newGroups);
+  config.dns = DNS_CONFIG;
   config.rules = [
     ...buildRules(),
     ...(config.rules || []),
@@ -361,7 +382,11 @@ def render_shadowrocket(source: dict[str, Any]) -> str:
         "",
         "[General]",
         f"ipv6 = {str(dns['ipv6']).lower()}",
+        f"prefer-ipv6 = {str(dns['prefer_ipv6']).lower()}",
         f"private-ip-answer = {str(dns['private_ip_answer']).lower()}",
+        f"dns-direct-system = {str(dns['dns_direct_system']).lower()}",
+        f"dns-direct-fallback-proxy = {str(dns['dns_direct_fallback_proxy']).lower()}",
+        f"hijack-dns = {','.join(dns['hijack_dns'])}",
         f"dns-server = {','.join(dns['servers'])}",
         f"fallback-dns-server = {','.join(dns['fallback_servers'])}",
         f"proxy-dns-server = {','.join(dns['proxy_servers'])}",
@@ -415,13 +440,16 @@ def self_test(source: dict[str, Any]) -> None:
 
     assert clash.startswith(CLASH_MARKER)
     assert shadowrocket.startswith(SHADOWROCKET_MARKER)
+    assert "const DNS_CONFIG =" in clash
+    assert "config.dns = DNS_CONFIG;" in clash
     assert clash_rules == expected
     assert "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve" in shadowrocket
     assert f"FINAL,{source['targets'][source['final']]}" in shadowrocket
     assert (
-        "fallback-dns-server = 10.255.255.25,10.255.255.26,"
-        "https://1.1.1.1/dns-query,https://dns.google/dns-query"
+        "fallback-dns-server = https://1.1.1.1/dns-query,https://dns.google/dns-query"
     ) in shadowrocket
+    assert "dns-direct-system = false" in shadowrocket
+    assert "hijack-dns = 8.8.8.8,8.8.4.4,1.1.1.1,1.0.0.1" in shadowrocket
     assert "*.csust.edu.cn = server:10.255.255.25" in shadowrocket
     assert len(expected) == 80
 
