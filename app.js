@@ -12,7 +12,7 @@ const ruleGroupPatterns = {
   AI: [{ name: "ChatGPT", domains: ["openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com"] }, { name: "Gemini", domains: ["gemini.google.com"] }, { name: "Claude", domains: ["claude.ai", "anthropic.com", "claudeusercontent.com"] }, { name: "Perplexity", domains: ["perplexity.ai"] }],
   LINE: [{ name: "LINE CDN", domains: ["line-cdn.net", "line-scdn.net"] }, { name: "LINE 服务", domains: ["line.naver.jp", "line.me", "line-apps.com"] }],
   Netflix: [{ name: "Netflix 主站", domains: ["netflix.com", "netflix.net"] }, { name: "Netflix CDN", domains: ["nflximg.net", "nflxvideo.net", "nflxso.net", "nflxext.com"] }, { name: "Fast.com", domains: ["fast.com"] }],
-  YouTube: [{ name: "YouTube 短链接", domains: ["youtu.be"] }, { name: "YouTube CDN", domains: ["ytimg.com"] }, { name: "YouTube 主站", domains: ["youtube.com"] }],
+  YouTube: [{ name: "YouTube 短链接", domains: ["youtu.be"] }, { name: "YouTube CDN", domains: ["ytimg.com", "googlevideo.com"] }, { name: "YouTube 主站", domains: ["youtube.com"] }],
   TikTok: [{ name: "TikTok 主站", domains: ["tiktok.com", "tiktokv.com"] }, { name: "TikTok CDN", domains: ["tiktokcdn.com"] }, { name: "Musical.ly", domains: ["musical.ly", "muscdn.com"] }],
   Google: [{ name: "Google API", domains: ["googleapis.com"] }, { name: "Google 静态资源", domains: ["gstatic.com", "ggpht.com"] }, { name: "Google 主站", domains: ["google.com"] }, { name: "Google 视频", domains: ["googlevideo.com"] }, { name: "Google 用户内容", domains: ["googleusercontent.com"] }],
 };

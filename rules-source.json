@@ -71,7 +71,6 @@
       "gstatic.com",
       "ggpht.com",
       "google.com",
-      "googlevideo.com",
       "googleusercontent.com"
     ],
     "line": [
@@ -109,7 +108,7 @@
     {
       "name": "YouTube",
       "target": "SEA",
-      "domains": ["youtu.be", "ytimg.com", "youtube.com"]
+      "domains": ["youtu.be", "ytimg.com", "googlevideo.com", "youtube.com"]
     },
     {
       "name": "TikTok",
