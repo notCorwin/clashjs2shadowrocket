@@ -17,7 +17,7 @@ let source = null;
 let outputType = "clash";
 let flushGenerator = null;
 const LAN_ROUTE = "局域网直连";
-const routeDescriptions = { Apple: "Apple 服务直连", AI: "ChatGPT、Gemini、Claude、Grok、Cursor、Copilot 等 AI 服务", LINE: "LINE 服务", Netflix: "Netflix 与 Fast.com", YouTube: "YouTube 视频服务", TikTok: "TikTok 短视频服务", Google: "Google 服务", "局域网直连": "局域网、保留地址与特殊网段" };
+const routeDescriptions = { Apple: "Apple 服务直连", AI: "ChatGPT、Gemini、Claude、Grok、Cursor、Copilot 等 AI 服务", LINE: "LINE 服务", Netflix: "Netflix 与 Fast.com", YouTube: "YouTube 视频服务", TikTok: "TikTok 短视频服务", Google: "Google 服务", GitHub: "GitHub 与资源域名", "局域网直连": "局域网、保留地址与特殊网段" };
 // 国外 DoH 用 IP，避免解析 DoH 域名时再被污染。
 // 节点域名必须在翻墙前解析，只能走国内 DoH（1.1.1.1 本身往往要翻墙才能到）。
 const defaultOverseasDns = ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"];
@@ -86,6 +86,7 @@ const ruleGroupPatterns = {
   YouTube: [{ name: "YouTube 短链接", domains: ["youtu.be"] }, { name: "YouTube CDN", domains: ["ytimg.com", "googlevideo.com"] }, { name: "YouTube 主站", domains: ["youtube.com", "youtube-nocookie.com"] }],
   TikTok: [{ name: "TikTok 主站", domains: ["tiktok.com", "tiktokv.com"] }, { name: "TikTok CDN", domains: ["tiktokcdn.com", "tiktokcdn-us.com", "ttlivecdn.com", "byteoversea.com"] }, { name: "Musical.ly", domains: ["musical.ly", "muscdn.com"] }],
   Google: [{ name: "Google API", domains: ["googleapis.com"] }, { name: "Google 静态资源", domains: ["gstatic.com", "ggpht.com"] }, { name: "Google 主站", domains: ["google.com", "withgoogle.com"] }, { name: "Google 广告", domains: ["googleadservices.com"] }, { name: "Google 视频", domains: ["googlevideo.com"] }, { name: "Google 用户内容", domains: ["googleusercontent.com"] }],
+  GitHub: [{ name: "GitHub 主站", domains: ["github.com"] }, { name: "GitHub 用户内容", domains: ["githubusercontent.com"] }, { name: "GitHub Assets", domains: ["githubassets.com"] }],
 };
 
 const marker = (type) => type === "clash"

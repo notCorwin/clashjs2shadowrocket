@@ -82,6 +82,11 @@
       "line-apps.com",
       "line-cdn.net",
       "line-scdn.net"
+    ],
+    "github": [
+      "github.com",
+      "githubusercontent.com",
+      "githubassets.com"
     ]
   },
   "routes": [
@@ -127,6 +132,11 @@
       ]
     },
     {
+      "name": "GitHub",
+      "target": "US",
+      "domain_sets": ["github"]
+    },
+    {
       "name": "局域网直连",
       "target": "DIRECT",
       "cidrs": [
@@ -149,10 +159,7 @@
     { "name": "OKX", "domain": "okx.com", "target": "SEA" },
     { "name": "1Password", "domain": "1password.com", "target": "DIRECT" },
     { "name": "Immersive Translate", "domain": "immersivetranslate.com", "target": "DIRECT" },
-    { "name": "OpenRouter", "domain": "openrouter.ai", "target": "DIRECT" },
-    { "name": "GitHub", "domain": "github.com", "target": "US" },
-    { "name": "GitHubusercontent", "domain": "githubusercontent.com", "target": "US" },
-    { "name": "GitHub Assets", "domain": "githubassets.com", "target": "US" }
+    { "name": "OpenRouter", "domain": "openrouter.ai", "target": "DIRECT" }
   ],
   "standalone_rules": [
     { "name": "中国大陆", "target": "DIRECT", "geoips": ["CN"] }
