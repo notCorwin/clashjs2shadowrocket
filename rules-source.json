@@ -27,15 +27,15 @@
   ],
   "rule_sets": {
     "ai": [
-      "claude.ai",
-      "anthropic.com",
-      "claudeusercontent.com",
-      "gemini.google.com",
       "openai.com",
       "chatgpt.com",
       "oaistatic.com",
       "oaiusercontent.com",
       "api.openai.com",
+      "gemini.google.com",
+      "claude.ai",
+      "anthropic.com",
+      "claudeusercontent.com",
       "perplexity.ai"
     ],
     "apple": [
@@ -69,9 +69,9 @@
     "google": [
       "googleapis.com",
       "gstatic.com",
+      "ggpht.com",
       "google.com",
       "googlevideo.com",
-      "ggpht.com",
       "googleusercontent.com"
     ],
     "line": [
