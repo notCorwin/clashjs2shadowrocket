@@ -48,6 +48,14 @@ def require_strings(values: Any, location: str) -> list[str]:
     return values
 
 
+def route_domains(source: dict[str, Any], route: dict[str, Any]) -> list[str]:
+    domains: list[str] = []
+    for set_name in route.get("domain_sets", []):
+        domains.extend(source["rule_sets"][set_name])
+    domains.extend(route.get("domains", []))
+    return domains
+
+
 def validate_source(source: dict[str, Any]) -> None:
     if source.get("version") != 1:
         raise ValueError("只支持 version: 1")
@@ -130,6 +138,40 @@ def validate_source(source: dict[str, Any]) -> None:
                 ipaddress.ip_network(cidr, strict=False)
             except ValueError as error:
                 raise ValueError(f"{location} 包含无效 CIDR：{cidr}") from error
+        domain_targets = route.get("domain_targets", route.get("_domainTargets"))
+        if domain_targets is not None:
+            if not isinstance(domain_targets, list) or not all(isinstance(value, str) and value for value in domain_targets):
+                raise ValueError(f"{location}.domain_targets 必须是非空字符串数组")
+            if len(domain_targets) != len(route_domains(source, route)):
+                raise ValueError(f"{location}.domain_targets 必须和网址数量一致")
+            for domain_target in domain_targets:
+                if domain_target not in targets:
+                    raise ValueError(f"{location}.domain_targets 引用了未知策略：{domain_target}")
+
+    for index, item in enumerate(source.get("standalone_urls", [])):
+        location = f"standalone_urls[{index}]"
+        if not isinstance(item, dict) or not item.get("name") or not item.get("domain"):
+            raise ValueError(f"{location} 必须包含 name 和 domain")
+        if item.get("target") not in targets:
+            raise ValueError(f"{location}.target 引用了未知策略")
+        if not re.fullmatch(r"(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}", item["domain"]):
+            raise ValueError(f"{location}.domain 不是有效域名：{item['domain']}")
+
+    for index, item in enumerate(source.get("standalone_rules", [])):
+        location = f"standalone_rules[{index}]"
+        if not isinstance(item, dict) or not item.get("name"):
+            raise ValueError(f"{location}.name 必须是非空字符串")
+        if item.get("target") not in targets:
+            raise ValueError(f"{location}.target 引用了未知策略")
+        if not any(item.get(key) for key in ("geoips", "domains", "cidrs")):
+            raise ValueError(f"{location} 至少需要 geoips、domains 或 cidrs 之一")
+        require_strings(item.get("geoips"), f"{location}.geoips")
+        require_strings(item.get("domains"), f"{location}.domains")
+        for cidr in require_strings(item.get("cidrs"), f"{location}.cidrs"):
+            try:
+                ipaddress.ip_network(cidr, strict=False)
+            except ValueError as error:
+                raise ValueError(f"{location} 包含无效 CIDR：{cidr}") from error
 
     final = source.get("final")
     if final not in targets:
@@ -167,10 +209,23 @@ def validate_source(source: dict[str, Any]) -> None:
 def expanded_routes(source: dict[str, Any]) -> list[dict[str, Any]]:
     result = []
     for route in source["routes"]:
-        domains: list[str] = []
-        for set_name in route.get("domain_sets", []):
-            domains.extend(source["rule_sets"][set_name])
-        domains.extend(route.get("domains", []))
+        domains = route_domains(source, route)
+        domain_targets = route.get("domain_targets", route.get("_domainTargets"))
+        if domain_targets:
+            result.extend(
+                {"name": route["name"], "target": domain_targets[index], "domains": [domain]}
+                for index, domain in enumerate(domains)
+            )
+            other_rules = {
+                "name": route["name"],
+                "target": route["target"],
+                "geoips": route.get("geoips", []),
+                "keywords": route.get("keywords", []),
+                "cidrs": route.get("cidrs", []),
+            }
+            if any(other_rules[key] for key in ("geoips", "keywords", "cidrs")):
+                result.append(other_rules)
+            continue
 
         expanded = {
             "name": route["name"],
