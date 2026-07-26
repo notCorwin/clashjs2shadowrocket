@@ -151,12 +151,11 @@
     { "name": "鹿语云镜像", "domain": "luyuyun.cc", "target": "DIRECT" },
     { "name": "ITSSX", "domain": "itssx.com", "target": "DIRECT" },
     { "name": "CSUST", "domain": "csust.edu.cn", "target": "DIRECT" },
-    { "name": "OpenRouter", "domain": "openrouter.ai", "target": "DIRECT" }
+    { "name": "OpenRouter", "domain": "openrouter.ai", "target": "DIRECT" },
+    { "name": "GitHub", "domain": "github.com", "target": "US" }
   ],
   "standalone_rules": [
     { "name": "指定 IP / US", "target": "US", "cidrs": ["180.109.192.57/32", "172.20.10.1/32", "17.57.145.154/32"] },
-    { "name": "GitHub", "target": "US", "domains": ["github.com"] },
-    { "name": "Steam", "target": "SEA", "domains": ["steampowered.com", "gameanalytics.com", "t17service.com", "964nzttlu1.execute-api.eu-west-1.amazonaws.com"], "cidrs": ["59.37.139.7/32", "3.249.107.252/32"] },
     { "name": "中国大陆直连", "target": "DIRECT", "geoips": ["CN"] }
   ],
   "mihomo_dns": {

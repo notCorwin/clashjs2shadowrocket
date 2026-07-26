@@ -451,7 +451,7 @@ def self_test(source: dict[str, Any]) -> None:
     assert "dns-direct-system = false" in shadowrocket
     assert "hijack-dns = 8.8.8.8,8.8.4.4,1.1.1.1,1.0.0.1" in shadowrocket
     assert "*.csust.edu.cn = server:10.255.255.25" in shadowrocket
-    assert len(expected) == 80
+    assert len(expected) == 74
 
 
 def main() -> int:
@@ -462,7 +462,7 @@ def main() -> int:
         self_test(source)
 
         if sys.argv[1:] == ["--check"]:
-            print("检查通过：规则源有效，80 条规则和 Shadowrocket DNS 配置有效")
+            print("检查通过：规则源有效，74 条规则和 Shadowrocket DNS 配置有效")
             return 0
         if sys.argv[1:]:
             raise ValueError("无需输入参数；可选参数只有 --check")
