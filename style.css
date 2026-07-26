@@ -37,6 +37,7 @@ footer { display:flex; justify-content:space-between; color:var(--muted); font-s
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .standalone-rule { display:grid; grid-template-columns:1fr 1fr 2fr 1fr auto; gap:8px; align-items:start; }
 .standalone-rule textarea { min-height:70px; resize:vertical; }
+.geoip-rule { padding:10px; border-left:3px solid var(--accent); border-radius:6px; background:#20271d; }
 .standalone-row input, .standalone-rule input { display:block; }
 .standalone-rule { grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) auto; }
 .standalone-rule textarea { grid-column:1 / -1; grid-row:2; min-height:86px; }
