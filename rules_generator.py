@@ -185,6 +185,9 @@ def expanded_routes(source: dict[str, Any]) -> list[dict[str, Any]]:
             if values:
                 expanded[key] = values
         result.append(expanded)
+    for item in source.get("standalone_urls", []):
+        result.append({"name": item["name"], "target": item["target"], "domains": [item["domain"]]})
+    result.extend(source.get("standalone_rules", []))
     return result
 
 
