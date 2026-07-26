@@ -67,20 +67,6 @@
       "nflxext.com",
       "fast.com"
     ],
-    "stream": [
-      "tiktok.com",
-      "tiktokv.com",
-      "tiktokcdn.com",
-      "tiktokcdn-us.com",
-      "ttlivecdn.com",
-      "byteoversea.com",
-      "musical.ly",
-      "muscdn.com",
-      "youtu.be",
-      "ytimg.com",
-      "youtube.com",
-      "youtube-nocookie.com"
-    ],
     "google": [
       "googleapis.com",
       "gstatic.com",
@@ -151,7 +137,10 @@
         "169.254.0.0/16",
         "100.64.0.0/10",
         "224.0.0.0/4",
-        "240.0.0.0/4"
+        "240.0.0.0/4",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10"
       ]
     }
   ],
@@ -161,7 +150,9 @@
     { "name": "1Password", "domain": "1password.com", "target": "DIRECT" },
     { "name": "Immersive Translate", "domain": "immersivetranslate.com", "target": "DIRECT" },
     { "name": "OpenRouter", "domain": "openrouter.ai", "target": "DIRECT" },
-    { "name": "GitHub", "domain": "github.com", "target": "US" }
+    { "name": "GitHub", "domain": "github.com", "target": "US" },
+    { "name": "GitHubusercontent", "domain": "githubusercontent.com", "target": "US" },
+    { "name": "GitHub Assets", "domain": "githubassets.com", "target": "US" }
   ],
   "standalone_rules": [
     { "name": "中国大陆", "target": "DIRECT", "geoips": ["CN"] }
