@@ -1,4 +1,4 @@
-// 规则生成器的最小自检：node check.mjs
+// 分流策略管理的最小自检：node check.mjs
 // 用一个 DOM 替身加载真实的 app.js，只为了拿到里面的纯函数，不模拟界面。
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -28,7 +28,7 @@ app.validate(withV6);
 assert.ok(ruleLines(withV6).includes("IP-CIDR6,fc00::/7,DIRECT,no-resolve"));
 assert.ok(ruleLines(withV6).includes("IP-CIDR,10.1.0.0/16,DIRECT,no-resolve"));
 
-// 停用的策略组不进输出，但仍保留在规则源里，切换面板不会丢
+// 停用的策略组不进输出，但仍保留在规则源里
 const disabled = fixture();
 disabled.routes[0].enabled = false;
 const emitted = new Set(app.rules(disabled, "MATCH").map(([, name]) => name));
@@ -59,9 +59,18 @@ for (const rule of ruleLines(data)) {
 }
 
 // 直连域名和代理域名必须用不同的 DNS，否则国内站点会被解析到远端 CDN
+assert.ok(data.dns?.overseas?.length && data.dns?.domestic?.length, "应展开默认 DNS 列表");
+assert.notDeepEqual(data.dns.overseas, data.dns.domestic);
 assert.notDeepEqual(data.mihomo_dns["direct-nameserver"], data.mihomo_dns.nameserver);
 assert.match(app.renderShadowrocket(data), /^dns-direct-system = true$/m);
 assert.match(app.renderShadowrocket(data), /^FINAL,/m);
+// 规则源不必手写完整 DNS；缺省时用内置默认值
+const bare = fixture();
+assert.equal(bare.mihomo_dns, undefined);
+assert.equal(bare.shadowrocket_dns, undefined);
+app.validate(bare);
+assert.deepEqual(bare.dns.overseas, ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"]);
+assert.deepEqual(bare.dns.domestic, ["https://223.5.5.5/dns-query", "https://1.12.0.2/dns-query"]);
 
 for (const [value, expected] of [["1.2.3.4/32", true], ["1.2.3.4", false], ["256.0.0.1/8", false], ["10.0.0.0/33", false], ["1.2.3.4/8/8", false], ["2001:db8::/32", true], ["2001:db8::/129", false]]) {
   assert.equal(app.validCidr(value), expected, `validCidr(${value})`);

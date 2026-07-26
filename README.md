@@ -1,10 +1,8 @@
-# Clash JS / Shadowrocket 规则生成器
+# Mihomo / Shadowrocket 分流策略管理
 
-这是一个无需后端和构建工具的静态页面。默认以“规则生成器”为主入口，内置 AI、Google、流媒体、Apple、局域网直连等分流策略，以及东南亚/美国自动测速节点组；选择策略后即可生成 `Clash JS` 和 `Shadowrocket` 配置。
+这是一个无需后端和构建工具的静态页面。内置 AI、Google、流媒体、Apple、局域网直连等分流策略，以及东南亚/美国自动测速节点组；在页面里维护策略后即可生成 `Mihomo` 脚本与 `Shadowrocket` 配置。
 
-“配置转换器”作为次要入口保留，用于导入或直接编辑完整的 `rules-source.json`，适合高级用户维护自定义规则。两个面板共用同一份规则源：切换面板时当前面板的编辑结果会先写回规则源，所以来回切不会丢改动。
-
-`rules-source.json` 是一份通用示例。自己的日常配置建议用页面上的“导出规则源”存成本地文件（`rules-source.local.json` 已被 gitignore），需要时再用“导入 JSON”载入，避免把个人网段、内网 DNS 提交进仓库。
+`rules-source.json` 是页面加载时使用的通用示例。个人网段、内网 DNS 等本地改动请放在已被 gitignore 的 `rules-source.local.json`，不要提交进仓库。
 
 ## 本地预览
 
@@ -32,9 +30,9 @@ node check.mjs
 
 ## DNS 策略
 
-DNS 分成两份，各管一边：
+`rules-source.json` 不写完整 DNS。生成时用内置默认值展开，页面上也只暴露两份列表：
 
-- **国外 DoH（代理域名）**：写入 Clash 的 `nameserver` / `proxy-server-nameserver` 和 Shadowrocket 的 `dns-server` / `fallback-dns-server` / `proxy-dns-server`。默认 Cloudflare + Google，用 IP 形式的 DoH，避免解析 DoH 域名本身时再被污染。
-- **国内 DoH（直连域名）**：写入 Clash 的 `direct-nameserver`；Shadowrocket 没有对应字段，改为 `dns-direct-system = true`，交给系统 DNS。如果直连域名也用国外 DNS，国内站点会被调度到远端 CDN，直连反而更慢。
+- **国外 DoH（代理域名）**：Clash 的 `nameserver` / `proxy-server-nameserver`，Shadowrocket 的 `dns-server` / `fallback-dns-server` / `proxy-dns-server`。默认 `1.1.1.1` + `8.8.8.8` 的 IP 形式 DoH，避免解析 DoH 域名时再被污染。
+- **国内 DoH（直连域名）**：Clash 的 `direct-nameserver`（默认阿里 / 腾讯 IP 形式 DoH）；Shadowrocket 用 `dns-direct-system = true` 走系统 DNS。直连域名若也走国外 DNS，国内站点容易被调度到远端 CDN。
 
-Fake-IP 排除局域网、NTP、STUN 等必须返回真实地址的场景；`hijack-dns` 拦截常见硬编码 DNS，减少明文 DNS 泄漏。生成器底部的 DNS 面板只维护上面这两份列表，其余字段沿用规则源里的取值，导入的配置不会被覆盖。
+其余项（fake-ip 过滤、`hijack-dns`、bootstrap nameserver 等）固定用代码里的防污染默认值，不必写进规则源。
