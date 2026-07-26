@@ -18,12 +18,7 @@ python3 -m http.server 8000
 
 在仓库 Settings → Pages 中选择部署分支的根目录（`/ (root)`）。提交 `index.html`、`app.js`、`style.css` 和 `rules-source.json` 后，GitHub Pages 会直接提供页面。
 
-规则源的唯一编辑入口是 `rules-source.json`；`clash.js` 与 `shadowrocket.conf` 仍可通过原有的 Python 生成器生成：
-
-```bash
-python3 rules_generator.py --check
-python3 rules_generator.py
-```
+规则源的唯一编辑入口是 `rules-source.json`。网页中的“配置转换器”可以直接生成并下载最新的 `Clash JS` 与 `Shadowrocket` 配置；仓库内现有的 `clash.js` 与 `shadowrocket.conf` 是已生成的静态示例。
 
 ## DNS 策略
 
