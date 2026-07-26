@@ -169,11 +169,13 @@
     { "name": "ITSSX", "domain": "itssx.com", "target": "DIRECT" },
     { "name": "CSUST", "domain": "csust.edu.cn", "target": "DIRECT" },
     { "name": "OpenRouter", "domain": "openrouter.ai", "target": "DIRECT" },
-    { "name": "GitHub", "domain": "github.com", "target": "US" }
+    { "name": "GitHub", "domain": "github.com", "target": "US" },
+    { "name": "180.109.192.57", "domain": "180.109.192.57/32", "target": "US" },
+    { "name": "172.20.10.1", "domain": "172.20.10.1/32", "target": "US" },
+    { "name": "17.57.145.154", "domain": "17.57.145.154/32", "target": "US" }
   ],
   "standalone_rules": [
-    { "name": "指定 IP / US", "target": "US", "cidrs": ["180.109.192.57/32", "172.20.10.1/32", "17.57.145.154/32"] },
-    { "name": "中国大陆直连", "target": "DIRECT", "geoips": ["CN"] }
+    { "name": "中国大陆", "target": "DIRECT", "geoips": ["CN"] }
   ],
   "mihomo_dns": {
     "enable": true,
@@ -184,8 +186,8 @@
     "respect-rules": false,
     "ipv6": false,
     "default-nameserver": [
-      "223.5.5.5",
-      "119.29.29.29"
+      "1.1.1.1",
+      "8.8.8.8"
     ],
     "enhanced-mode": "fake-ip",
     "fake-ip-range": "198.18.0.1/16",
@@ -210,40 +212,25 @@
       "*.xboxlive.com"
     ],
     "nameserver": [
-      "https://doh.pub/dns-query",
-      "https://dns.alidns.com/dns-query"
-    ],
-    "fallback": [
       "https://1.1.1.1/dns-query",
-      "https://dns.google/dns-query"
+      "https://8.8.8.8/dns-query"
     ],
+    "fallback": [],
     "proxy-server-nameserver": [
-      "https://doh.pub/dns-query",
-      "https://dns.alidns.com/dns-query"
+      "https://1.1.1.1/dns-query",
+      "https://8.8.8.8/dns-query"
     ],
     "direct-nameserver": [
-      "system"
+      "https://1.1.1.1/dns-query",
+      "https://8.8.8.8/dns-query"
     ],
     "direct-nameserver-follow-policy": false,
     "fallback-filter": {
-      "geoip": true,
+      "geoip": false,
       "geoip-code": "CN",
-      "geosite": [
-        "gfw"
-      ],
-      "ipcidr": [
-        "240.0.0.0/4"
-      ],
-      "domain": [
-        "+.google.com",
-        "+.youtube.com",
-        "+.facebook.com",
-        "+.twitter.com",
-        "+.github.com",
-        "+.githubusercontent.com",
-        "+.openai.com",
-        "+.chatgpt.com"
-      ]
+      "geosite": [],
+      "ipcidr": [],
+      "domain": []
     }
   },
   "shadowrocket_dns": {
@@ -253,23 +240,24 @@
     "dns_direct_system": false,
     "dns_direct_fallback_proxy": true,
     "hijack_dns": [
-      "8.8.8.8",
-      "8.8.4.4",
-      "1.1.1.1",
-      "1.0.0.1"
+      "8.8.8.8:53",
+      "8.8.4.4:53",
+      "1.1.1.1:53",
+      "1.0.0.1:53",
+      "223.5.5.5:53",
+      "119.29.29.29:53"
     ],
     "servers": [
-      "https://doh.pub/dns-query",
-      "https://dns.alidns.com/dns-query"
+      "https://1.1.1.1/dns-query",
+      "https://8.8.8.8/dns-query"
     ],
     "fallback_servers": [
       "https://1.1.1.1/dns-query",
-      "https://dns.google/dns-query"
+      "https://8.8.8.8/dns-query"
     ],
     "proxy_servers": [
-      "https://doh.pub/dns-query",
-      "https://dns.alidns.com/dns-query",
-      "tls://223.5.5.5"
+      "https://1.1.1.1/dns-query",
+      "https://8.8.8.8/dns-query"
     ],
     "always_real_ip": [
       "*.lan",

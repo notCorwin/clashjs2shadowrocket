@@ -95,6 +95,16 @@ function ruleGroupName(route, entry) {
   return group?.name || "其他规则";
 }
 
+function normalizeStandaloneValue(value) {
+  const text = String(value || "").trim();
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(text)) return `${text}/32`;
+  return text;
+}
+function expandStandaloneUrl(item) {
+  const value = normalizeStandaloneValue(item.domain);
+  if (validCidr(value)) return { name: item.name, target: item.target, cidrs: [value] };
+  return { name: item.name, target: item.target, domains: [value] };
+}
 function expandedRoutes(data) {
   return [...data.routes.flatMap((route) => {
     const domains = routeDomains(data, route);
@@ -103,7 +113,7 @@ function expandedRoutes(data) {
     const domainRoutes = domains.map((domain, index) => ({ name: route.name, target: domainTargets[index] || route.target, domains: [domain] }));
     const otherRules = { name: route.name, target: route.target, geoips: route.geoips || [], keywords: route.keywords || [], cidrs: route.cidrs || [] };
     return [...domainRoutes, ...(otherRules.geoips.length || otherRules.keywords.length || otherRules.cidrs.length ? [otherRules] : [])];
-  }), ...(data.standalone_urls || []).map((item) => ({ name: item.name, target: item.target, domains: [item.domain] })), ...(data.standalone_rules || [])];
+  }), ...(data.standalone_urls || []).map(expandStandaloneUrl), ...(data.standalone_rules || [])];
 }
 
 function rules(data, finalType) {
@@ -178,27 +188,27 @@ function validate(data) {
     }
   }
   for (const item of data.standalone_urls || []) {
-    if (!item.name || !item.domain || !domainPattern.test(item.domain)) throw new Error(`独立网址无效：${item.domain || "空值"}`);
+    const value = normalizeStandaloneValue(item.domain);
+    if (!item.name || !value || !(domainPattern.test(value) || validCidr(value))) throw new Error(`独立网址无效：${item.domain || "空值"}`);
     if (!data.targets[item.target]) throw new Error(`独立网址「${item.name}」引用了未知策略`);
   }
   for (const item of data.standalone_rules || []) {
-    if (!item.name || !data.targets[item.target] || !["geoips", "domains", "cidrs"].some((field) => item[field]?.length)) throw new Error(`独立规则「${item.name || "未命名"}」配置无效`);
-    for (const domain of item.domains || []) if (!domainPattern.test(domain)) throw new Error(`域名无效：${domain}`);
-    for (const cidr of item.cidrs || []) if (!validCidr(cidr)) throw new Error(`CIDR 无效：${cidr}`);
-    for (const geoip of item.geoips || []) if (!/^[A-Z]{2}$/i.test(geoip)) throw new Error(`GeoIP 无效：${geoip}`);
+    if (!item.name || !data.targets[item.target] || !item.geoips?.length) throw new Error(`GeoIP 规则「${item.name || "未命名"}」配置无效`);
+    for (const geoip of item.geoips) if (!/^[A-Z]{2}$/i.test(geoip)) throw new Error(`GeoIP 无效：${geoip}`);
   }
   if (!data.targets[data.final]) throw new Error("final 引用了未知策略");
   const mihomoDns = data.mihomo_dns;
   if (!mihomoDns || typeof mihomoDns !== "object") throw new Error("缺少 mihomo_dns 配置");
   if (mihomoDns.enable !== true || !["arc", "lru"].includes(mihomoDns["cache-algorithm"]) || !["fake-ip", "redir-host"].includes(mihomoDns["enhanced-mode"])) throw new Error("mihomo_dns 基础配置无效");
-  for (const field of ["default-nameserver", "fake-ip-filter", "nameserver", "fallback", "proxy-server-nameserver", "direct-nameserver"]) if (!Array.isArray(mihomoDns[field]) || mihomoDns[field].some((value) => typeof value !== "string" || !value || /[,\r\n]/.test(value))) throw new Error(`mihomo_dns.${field} 配置无效`);
+  for (const field of ["default-nameserver", "fake-ip-filter", "nameserver", "proxy-server-nameserver", "direct-nameserver"]) if (!Array.isArray(mihomoDns[field]) || !mihomoDns[field].length || mihomoDns[field].some((value) => typeof value !== "string" || !value || /[,\r\n]/.test(value))) throw new Error(`mihomo_dns.${field} 配置无效`);
+  if (!Array.isArray(mihomoDns.fallback) || mihomoDns.fallback.some((value) => typeof value !== "string" || !value || /[,\r\n]/.test(value))) throw new Error("mihomo_dns.fallback 配置无效");
   const fallbackFilter = mihomoDns["fallback-filter"];
-  if (!fallbackFilter || fallbackFilter.geoip !== true || !/^[A-Z]{2}$/i.test(fallbackFilter["geoip-code"] || "") || !Array.isArray(fallbackFilter.geosite) || !Array.isArray(fallbackFilter.ipcidr) || !Array.isArray(fallbackFilter.domain)) throw new Error("mihomo_dns.fallback-filter 配置无效");
+  if (!fallbackFilter || typeof fallbackFilter.geoip !== "boolean" || !Array.isArray(fallbackFilter.geosite) || !Array.isArray(fallbackFilter.ipcidr) || !Array.isArray(fallbackFilter.domain)) throw new Error("mihomo_dns.fallback-filter 配置无效");
   const dns = data.shadowrocket_dns;
   if (!dns || typeof dns !== "object") throw new Error("缺少 shadowrocket_dns 配置");
   for (const field of ["ipv6", "prefer_ipv6", "private_ip_answer", "dns_direct_system", "dns_direct_fallback_proxy"]) if (typeof dns[field] !== "boolean") throw new Error(`shadowrocket_dns.${field} 必须是布尔值`);
   for (const field of ["servers", "fallback_servers", "proxy_servers", "always_real_ip", "hijack_dns"]) if (!Array.isArray(dns[field]) || !dns[field].length || dns[field].some((value) => typeof value !== "string" || !value || /[,\r\n]/.test(value))) throw new Error(`shadowrocket_dns.${field} 配置无效`);
-  if (!Array.isArray(dns.host_servers) || !dns.host_servers.length) throw new Error("shadowrocket_dns.host_servers 配置无效");
+  if (!Array.isArray(dns.host_servers)) throw new Error("shadowrocket_dns.host_servers 配置无效");
 }
 
 function render() {
@@ -206,7 +216,7 @@ function render() {
     source = JSON.parse(sourceEl.value); validate(source);
     outputEl.value = outputType === "clash" ? renderClash(source) : renderShadowrocket(source);
     const count = rules(source, "MATCH").length;
-    summaryEl.textContent = `${count} 条规则 · ${source.routes.length} 个策略组 · ${(source.standalone_urls || []).length} 个独立网址 · ${(source.standalone_rules || []).length} 个独立规则 · 浏览器本地生成`;
+    summaryEl.textContent = `${count} 条规则 · ${source.routes.length} 个策略组 · ${(source.standalone_urls || []).length} 个独立网址 · ${(source.standalone_rules || []).length} 个 GeoIP · 浏览器本地生成`;
     statusEl.textContent = "校验通过"; statusEl.className = ""; generatorStatusEl.textContent = "规则源校验通过"; generatorStatusEl.className = "generator-status";
   } catch (error) { statusEl.textContent = error.message; statusEl.className = "error"; generatorStatusEl.textContent = error.message; generatorStatusEl.className = "generator-status error"; summaryEl.textContent = "规则源无效"; outputEl.value = ""; }
 }
@@ -224,6 +234,12 @@ function setupGenerator(data) {
       route.domains = [];
     }
   }
+  data.standalone_rules = (data.standalone_rules || []).flatMap((item) => {
+    if (item.geoips?.length) return item.geoips.map((code) => ({ name: geoipName(code), target: item.target, geoips: [String(code).toUpperCase()] }));
+    const values = [...(item.domains || []), ...(item.cidrs || [])];
+    data.standalone_urls.push(...values.map((value) => ({ name: item.name || value, domain: value, target: item.target })));
+    return [];
+  });
   let editingRoute = null;
   const renderRoutes = () => {
     const isLanRoute = (route) => route.name === "局域网直连";
@@ -273,21 +289,23 @@ function setupGenerator(data) {
     });
   };
   renderRoutes();
-  const renderStandalone = () => { document.querySelector("#standalone-options").innerHTML = (data.standalone_urls || []).map((item, index) => `<div class="standalone-row"><input aria-label="网址名称" data-standalone-name="${index}" value="${escapeHtml(item.name)}"><input aria-label="网址" data-standalone-domain="${index}" value="${escapeHtml(item.domain)}"><select aria-label="目标节点组" data-standalone-target="${index}">${Object.entries(data.targets).map(([key, name]) => `<option value="${key}" ${item.target === key ? "selected" : ""}>${name}</option>`).join("")}</select><button type="button" data-remove-standalone="${index}">删除</button></div>`).join(""); document.querySelectorAll("[data-standalone-name]").forEach((input) => input.oninput = () => { data.standalone_urls[input.dataset.standaloneName].name = input.value; }); document.querySelectorAll("[data-standalone-domain]").forEach((input) => input.oninput = () => { data.standalone_urls[input.dataset.standaloneDomain].domain = input.value.trim(); }); document.querySelectorAll("[data-standalone-target]").forEach((select) => select.onchange = () => { data.standalone_urls[select.dataset.standaloneTarget].target = select.value; }); document.querySelectorAll("[data-remove-standalone]").forEach((button) => button.onclick = () => { data.standalone_urls.splice(Number(button.dataset.removeStandalone), 1); renderStandalone(); }); };
+  const renderStandalone = () => {
+    document.querySelector("#standalone-options").innerHTML = (data.standalone_urls || []).map((item, index) => `<div class="standalone-row"><input aria-label="名称" data-standalone-name="${index}" value="${escapeHtml(item.name)}"><input aria-label="域名或 IP/CIDR" data-standalone-domain="${index}" value="${escapeHtml(item.domain)}" placeholder="example.com 或 1.2.3.4/32"><select aria-label="目标节点组" data-standalone-target="${index}">${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${item.target === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><button type="button" data-remove-standalone="${index}">删除</button></div>`).join("");
+    document.querySelectorAll("[data-standalone-name]").forEach((input) => input.oninput = () => { data.standalone_urls[input.dataset.standaloneName].name = input.value; });
+    document.querySelectorAll("[data-standalone-domain]").forEach((input) => input.oninput = () => { data.standalone_urls[input.dataset.standaloneDomain].domain = input.value.trim(); });
+    document.querySelectorAll("[data-standalone-target]").forEach((select) => select.onchange = () => { data.standalone_urls[select.dataset.standaloneTarget].target = select.value; });
+    document.querySelectorAll("[data-remove-standalone]").forEach((button) => button.onclick = () => { data.standalone_urls.splice(Number(button.dataset.removeStandalone), 1); renderStandalone(); });
+  };
   renderStandalone();
-  document.querySelector("#add-standalone").onclick = () => { data.standalone_urls ||= []; data.standalone_urls.push({ name: "新网址", domain: "example.com", target: "DIRECT" }); renderStandalone(); };
-  const renderRules = () => { document.querySelector("#rule-options").innerHTML = (data.standalone_rules || []).map((item, index) => ({ item, index })).filter(({ item }) => !item.geoips?.length).map(({ item, index }) => { const type = item.cidrs?.length ? "cidrs" : "domains"; return `<div class="standalone-rule"><input aria-label="规则名称" data-rule-name="${index}" value="${escapeHtml(item.name)}"><select aria-label="规则类型" data-rule-type="${index}"><option value="cidrs" ${type === "cidrs" ? "selected" : ""}>CIDR / IP</option><option value="domains" ${type === "domains" ? "selected" : ""}>域名</option></select><textarea aria-label="规则值" data-rule-values="${index}" spellcheck="false">${escapeHtml((item[type] || []).join("\n"))}</textarea><select aria-label="目标节点组" data-rule-target="${index}">${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${item.target === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><button type="button" data-remove-rule="${index}">删除</button></div>`; }).join(""); };
+  document.querySelector("#add-standalone").onclick = () => { data.standalone_urls.push({ name: "新条目", domain: "example.com", target: "DIRECT" }); renderStandalone(); };
   const renderGeoipRules = () => {
-    document.querySelector("#geoip-options").innerHTML = (data.standalone_rules || []).map((item, index) => ({ item, index })).filter(({ item }) => item.geoips?.length).map(({ item, index }) => {
-      const code = item.geoips[0] || "CN";
+    document.querySelector("#geoip-options").innerHTML = (data.standalone_rules || []).map((item, index) => {
+      const code = item.geoips?.[0] || "CN";
       return `<div class="geoip-row"><select aria-label="国家代码" data-geoip-code="${index}">${geoipOptions(code)}</select><select aria-label="GeoIP 目标节点组" data-rule-target="${index}">${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${item.target === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><button type="button" data-remove-rule="${index}">删除</button></div>`;
     }).join("");
   };
-  const syncRule = (index) => { const area = document.querySelector(`[data-rule-values="${index}"]`); const type = document.querySelector(`[data-rule-type="${index}"]`)?.value || "domains"; data.standalone_rules[index][type] = area.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean); };
   const renderRuleLists = () => {
-    renderRules();
     renderGeoipRules();
-    document.querySelectorAll("[data-rule-name]").forEach((input) => input.oninput = () => { data.standalone_rules[input.dataset.ruleName].name = input.value; });
     document.querySelectorAll("[data-geoip-code]").forEach((select) => select.onchange = () => {
       const item = data.standalone_rules[select.dataset.geoipCode];
       const code = select.value.toUpperCase();
@@ -297,14 +315,7 @@ function setupGenerator(data) {
     document.querySelectorAll("[data-rule-target]").forEach((select) => select.onchange = () => { data.standalone_rules[select.dataset.ruleTarget].target = select.value; });
     document.querySelectorAll("[data-remove-rule]").forEach((button) => button.onclick = () => { data.standalone_rules.splice(Number(button.dataset.removeRule), 1); renderRuleLists(); });
   };
-  data.standalone_rules = (data.standalone_rules || []).flatMap((item) => {
-    if (!item.geoips?.length) return [item];
-    return item.geoips.map((code) => ({ name: geoipName(code), target: item.target, geoips: [String(code).toUpperCase()] }));
-  });
   renderRuleLists();
-  document.querySelector("#rule-options").oninput = (event) => { if (event.target.matches("[data-rule-values]")) syncRule(Number(event.target.dataset.ruleValues)); };
-  document.querySelector("#rule-options").onchange = (event) => { if (event.target.matches("[data-rule-type]")) renderRuleLists(); };
-  document.querySelector("#add-rule").onclick = () => { data.standalone_rules.push({ name: "新规则", target: "DIRECT", cidrs: ["192.0.2.0/24"] }); renderRuleLists(); };
   document.querySelector("#add-geoip").onclick = () => { data.standalone_rules.push({ name: geoipName("CN"), target: "DIRECT", geoips: ["CN"] }); renderRuleLists(); };
   document.querySelector("#add-route").onclick = () => { data.routes.push({ name: `新策略 ${data.routes.length + 1}`, target: "DIRECT", domains: [], keywords: [] }); renderRoutes(); };
   document.querySelector("#save-domains").onclick = () => {
@@ -327,43 +338,37 @@ function setupGenerator(data) {
   document.querySelector("#group-tolerance").value = data.groups[0]?.tolerance ?? 10;
   const groupOptions = document.querySelector("#group-options");
   const dnsOptions = document.querySelector("#dns-options");
-  const getNested = (object, path) => path.split(".").reduce((value, key) => value?.[key], object);
-  const setNested = (object, path, value) => { const keys = path.split("."); const last = keys.pop(); const parent = keys.reduce((target, key) => target[key] ||= {}, object); parent[last] = value; };
-  const dnsList = (value) => Array.isArray(value) ? value.join("\\n") : "";
-  const dnsTextarea = (scope, path, label, value, help) => `<label><span>${label}</span><textarea data-dns-list="${scope}" data-dns-path="${path}" spellcheck="false">${escapeHtml(dnsList(value))}</textarea>${help ? `<small>${help}</small>` : ""}</label>`;
-  const renderDns = () => {
+  const defaultOverseasDns = ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"];
+  const applySharedDns = (servers) => {
+    const list = servers.length ? servers : defaultOverseasDns;
     const mihomo = data.mihomo_dns;
+    mihomo.enable = true;
+    mihomo["default-nameserver"] = ["1.1.1.1", "8.8.8.8"];
+    mihomo.nameserver = list;
+    mihomo.fallback = [];
+    mihomo["proxy-server-nameserver"] = list;
+    mihomo["direct-nameserver"] = list;
+    mihomo["direct-nameserver-follow-policy"] = false;
+    mihomo["fallback-filter"] = { geoip: false, "geoip-code": "CN", geosite: [], ipcidr: [], domain: [] };
     const shadowrocket = data.shadowrocket_dns;
-    dnsOptions.innerHTML = `<div class="dns-card"><h3>Clash JS / Mihomo</h3><div class="dns-flags">
-      <label><input type="checkbox" data-dns-flag="mihomo_dns.enable" ${mihomo.enable ? "checked" : ""}>启用 DNS</label>
-      <label><input type="checkbox" data-dns-flag="mihomo_dns.ipv6" ${mihomo.ipv6 ? "checked" : ""}>启用 IPv6</label>
-      <label><input type="checkbox" data-dns-flag="mihomo_dns.prefer-h3" ${mihomo["prefer-h3"] ? "checked" : ""}>优先 HTTP/3</label>
-      <label><input type="checkbox" data-dns-flag="mihomo_dns.respect-rules" ${mihomo["respect-rules"] ? "checked" : ""}>DNS 遵循规则</label>
-    </div><div class="dns-fields">
-      <label><span>增强模式</span><select data-dns-value="mihomo_dns.enhanced-mode"><option value="fake-ip" ${mihomo["enhanced-mode"] === "fake-ip" ? "selected" : ""}>Fake-IP（推荐）</option><option value="redir-host" ${mihomo["enhanced-mode"] === "redir-host" ? "selected" : ""}>Redir-Host（兼容）</option></select><small>Fake-IP 减少重复解析；局域网和 STUN 等地址由过滤列表排除。</small></label>
-      ${dnsTextarea("mihomo_dns", "default-nameserver", "Bootstrap DNS（用于解析 DoH 域名）", mihomo["default-nameserver"], "建议保留至少两个可用地址。此处仅用于启动解析。")}
-      ${dnsTextarea("mihomo_dns", "nameserver", "主 DNS（直连 DoH）", mihomo.nameserver, "优先使用；每行一个 DNS URL。")}
-      ${dnsTextarea("mihomo_dns", "fallback", "Fallback DNS（备用 DoH）", mihomo.fallback, "主 DNS 不可用或命中 fallback-filter 时使用。")}
-      ${dnsTextarea("mihomo_dns", "proxy-server-nameserver", "代理节点解析 DNS", mihomo["proxy-server-nameserver"], "用于解析代理服务器域名，避免依赖代理自身建立连接。")}
-      ${dnsTextarea("mihomo_dns", "direct-nameserver", "直连解析 DNS", mihomo["direct-nameserver"], "直连域名使用的 DNS；建议使用 DoH 而非 system，减少泄漏。")}
-      ${dnsTextarea("mihomo_dns", "fake-ip-filter", "Fake-IP 排除列表", mihomo["fake-ip-filter"], "局域网、NTP、STUN 等需要真实地址的域名。")}
-      ${dnsTextarea("mihomo_dns", "fallback-filter.domain", "Fallback 域名规则", mihomo["fallback-filter"]?.domain, "命中这些域名时优先使用 Fallback DNS。")}
-    </div></div><div class="dns-card"><h3>Shadowrocket</h3><div class="dns-flags">
-      <label><input type="checkbox" data-dns-flag="shadowrocket_dns.ipv6" ${shadowrocket.ipv6 ? "checked" : ""}>启用 IPv6</label>
-      <label><input type="checkbox" data-dns-flag="shadowrocket_dns.prefer_ipv6" ${shadowrocket.prefer_ipv6 ? "checked" : ""}>优先 IPv6</label>
-      <label><input type="checkbox" data-dns-flag="shadowrocket_dns.private_ip_answer" ${shadowrocket.private_ip_answer ? "checked" : ""}>允许私有 IP 响应</label>
-      <label><input type="checkbox" data-dns-flag="shadowrocket_dns.dns_direct_system" ${shadowrocket.dns_direct_system ? "checked" : ""}>允许系统 DNS</label>
-      <label><input type="checkbox" data-dns-flag="shadowrocket_dns.dns_direct_fallback_proxy" ${shadowrocket.dns_direct_fallback_proxy ? "checked" : ""}>Fallback 走代理</label>
-    </div><div class="dns-fields">
-      ${dnsTextarea("shadowrocket_dns", "servers", "主 DNS（DoH / DoT）", shadowrocket.servers, "优先使用的加密 DNS。")}
-      ${dnsTextarea("shadowrocket_dns", "fallback_servers", "Fallback DNS（备用 DoH / DoT）", shadowrocket.fallback_servers, "主 DNS 失败时接管。")}
-      ${dnsTextarea("shadowrocket_dns", "proxy_servers", "代理 DNS", shadowrocket.proxy_servers, "代理链路中的 DNS，建议至少保留两个加密服务。")}
-      ${dnsTextarea("shadowrocket_dns", "hijack_dns", "DNS 劫持地址", shadowrocket.hijack_dns, "拦截常见硬编码 DNS；每行一个 IP。")}
-      ${dnsTextarea("shadowrocket_dns", "always_real_ip", "始终返回真实 IP", shadowrocket.always_real_ip, "局域网、NTP、STUN 等必须绕过 Fake-IP 的域名。")}
-    </div></div>`;
-    dnsOptions.querySelectorAll("[data-dns-list]").forEach((field) => field.oninput = () => setNested(data[field.dataset.dnsList], field.dataset.dnsPath, field.value.split(/\\r?\\n/).map((value) => value.trim()).filter(Boolean)));
-    dnsOptions.querySelectorAll("[data-dns-flag]").forEach((field) => field.onchange = () => { const [scope, ...path] = field.dataset.dnsFlag.split("."); setNested(data[scope], path.join("."), field.checked); });
-    dnsOptions.querySelectorAll("[data-dns-value]").forEach((field) => field.onchange = () => { const [scope, ...path] = field.dataset.dnsValue.split("."); setNested(data[scope], path.join("."), field.value); });
+    shadowrocket.dns_direct_system = false;
+    shadowrocket.servers = list;
+    shadowrocket.fallback_servers = list;
+    shadowrocket.proxy_servers = list;
+  };
+  const looksDomesticDns = (list) => (list || []).some((value) => /doh\.pub|alidns|223\.5\.5\.5|119\.29\.29\.29|^system$/i.test(value));
+  const seedDns = looksDomesticDns(data.mihomo_dns.nameserver) || looksDomesticDns(data.mihomo_dns["direct-nameserver"]) || looksDomesticDns(data.shadowrocket_dns.servers)
+    ? defaultOverseasDns
+    : (data.mihomo_dns.nameserver?.length ? data.mihomo_dns.nameserver : defaultOverseasDns);
+  applySharedDns(seedDns);
+  const renderDns = () => {
+    const servers = data.mihomo_dns.nameserver || defaultOverseasDns;
+    dnsOptions.innerHTML = `<div class="dns-card dns-card-simple"><h3>国外 DoH（防污染）</h3>
+      <p class="section-help">只维护这一份列表；会同步到 Clash / Shadowrocket 的主 DNS、直连 DNS 与节点解析 DNS。默认 Cloudflare + Google，使用 IP 形式 DoH，避免再被国内 DNS 污染。</p>
+      <label><span>DNS 服务器</span><textarea id="shared-dns-servers" spellcheck="false">${escapeHtml(servers.join("\n"))}</textarea><small>每行一个；推荐保留至少两个国外 DoH。</small></label>
+    </div>`;
+    const area = document.querySelector("#shared-dns-servers");
+    area.oninput = () => applySharedDns(area.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean));
   };
   const renderGroups = () => {
     groupOptions.innerHTML = data.groups.map((group, index) => `<div class="group-row" data-group="${index}">
@@ -410,7 +415,7 @@ function setupGenerator(data) {
       group.fallback ||= "DIRECT";
     });
     data.routes.forEach((route, index) => { const target = document.querySelector(`[data-target-route="${index}"]`); if (target) route.target = target.value; });
-    document.querySelectorAll("[data-rule-values]").forEach((area) => { const index = Number(area.dataset.ruleValues); const type = document.querySelector(`[data-rule-type="${index}"]`).value; data.standalone_rules[index][type] = area.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean); });
+    data.standalone_urls.forEach((item) => { item.domain = normalizeStandaloneValue(item.domain); });
     syncGroupKeys(data);
     source = JSON.parse(JSON.stringify(data));
     source.routes = source.routes.filter((route) => route.enabled !== false);
