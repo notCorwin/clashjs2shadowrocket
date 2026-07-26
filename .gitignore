@@ -1,4 +1,7 @@
+.DS_Store
 *.pyc
+__pycache__/
 clash.yaml
 shadowrocket.conf
 clash.js
+rules-source.local.json

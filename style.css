@@ -68,8 +68,11 @@ button:hover, .file-button:hover { border-color: var(--accent); color: var(--acc
   display: block; width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--text); font: 12px var(--mono);
 }
 .route-option select, select { cursor: pointer; }
-.edit-domains { margin-top: 9px; padding: 6px 9px; border-color: transparent; background: transparent; color: var(--muted); font-size: 11px; }
+.route-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.edit-domains, .remove-route { margin-top: 9px; padding: 6px 9px; border-color: transparent; background: transparent; color: var(--muted); font-size: 11px; }
 .edit-domains:hover { background: var(--surface-soft); }
+.remove-route { color: var(--danger); }
+.remove-route:hover { border-color: #704848; background: #301e20; }
 
 .subheading { margin: 26px 0 0; font-size: 14px; }
 .section-help { margin: 7px 0 0; color: var(--muted); font-size: 12px; }
@@ -95,7 +98,11 @@ details summary { cursor: pointer; color: var(--text); font-weight: 650; }
 .shared-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 240px)); gap: 14px; padding-top: 16px; }
 .group-options { display: grid; gap: 18px; padding-top: 20px; }
 .dns-options { display: grid; grid-template-columns: 1fr; gap: 18px; padding-top: 16px; max-width: 640px; }
-.dns-card-simple textarea { min-height: 96px; }
+.dns-card-simple { display: grid; gap: 12px; }
+.dns-card-simple h3, .dns-card-simple .section-help { margin: 0; }
+.dns-card-simple label > span { display: block; margin-bottom: 6px; color: var(--text); font-size: 12px; }
+.dns-card-simple textarea { min-height: 78px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); font: 12px/1.6 var(--mono); }
+.dns-card-simple small { display: block; margin-top: 5px; color: var(--faint); font-size: 10px; }
 .dns-card { padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.012); }
 .dns-card h3 { margin: 0 0 12px; font-size: 14px; }
 .dns-flags { display: flex; flex-wrap: wrap; gap: 12px 18px; margin-bottom: 14px; }
@@ -133,8 +140,8 @@ textarea { display: block; width: 100%; min-height: 620px; padding: 18px; border
 .domain-drawer p { color: var(--muted); font-size: 12px; }
 .drawer-group { margin: 18px 0 8px; padding: 8px 10px; border: 1px solid #3b5130; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font: 11px var(--mono); }
 .drawer-item { display: grid; grid-template-columns: auto minmax(0,1.5fr) minmax(0,1fr); gap: 8px; align-items: center; margin: 9px 0; }
-.drawer-item.drawer-item-plain { grid-template-columns: auto 1fr; }
-.drawer-item > span { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.drawer-item.drawer-item-plain { grid-template-columns: minmax(96px, auto) 1fr; }
+.drawer-item > select { width: auto; }
 .save-domains { width: 100%; margin-top: 14px; }
 
 footer { display: flex; justify-content: space-between; padding-top: 20px; color: var(--faint); font-size: 12px; }

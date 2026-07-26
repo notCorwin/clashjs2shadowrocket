@@ -102,8 +102,7 @@
     {
       "name": "Apple",
       "target": "DIRECT",
-      "domain_sets": ["apple"],
-      "keywords": ["apple"]
+      "domain_sets": ["apple"]
     },
     {
       "name": "AI",
@@ -113,8 +112,7 @@
     {
       "name": "LINE",
       "target": "SEA",
-      "domain_sets": ["line"],
-      "keywords": ["line"]
+      "domain_sets": ["line"]
     },
     {
       "name": "Netflix",
@@ -153,9 +151,7 @@
         "169.254.0.0/16",
         "100.64.0.0/10",
         "224.0.0.0/4",
-        "240.0.0.0/4",
-        "114.66.28.123/32",
-        "10.255.255.0/24"
+        "240.0.0.0/4"
       ]
     }
   ],
@@ -164,15 +160,8 @@
     { "name": "OKX", "domain": "okx.com", "target": "SEA" },
     { "name": "1Password", "domain": "1password.com", "target": "DIRECT" },
     { "name": "Immersive Translate", "domain": "immersivetranslate.com", "target": "DIRECT" },
-    { "name": "鹿语云", "domain": "luyuyun.net", "target": "DIRECT" },
-    { "name": "鹿语云镜像", "domain": "luyuyun.cc", "target": "DIRECT" },
-    { "name": "ITSSX", "domain": "itssx.com", "target": "DIRECT" },
-    { "name": "CSUST", "domain": "csust.edu.cn", "target": "DIRECT" },
     { "name": "OpenRouter", "domain": "openrouter.ai", "target": "DIRECT" },
-    { "name": "GitHub", "domain": "github.com", "target": "US" },
-    { "name": "180.109.192.57", "domain": "180.109.192.57/32", "target": "US" },
-    { "name": "172.20.10.1", "domain": "172.20.10.1/32", "target": "US" },
-    { "name": "17.57.145.154", "domain": "17.57.145.154/32", "target": "US" }
+    { "name": "GitHub", "domain": "github.com", "target": "US" }
   ],
   "standalone_rules": [
     { "name": "中国大陆", "target": "DIRECT", "geoips": ["CN"] }
@@ -186,8 +175,8 @@
     "respect-rules": false,
     "ipv6": false,
     "default-nameserver": [
-      "1.1.1.1",
-      "8.8.8.8"
+      "223.5.5.5",
+      "119.29.29.29"
     ],
     "enhanced-mode": "fake-ip",
     "fake-ip-range": "198.18.0.1/16",
@@ -221,8 +210,8 @@
       "https://8.8.8.8/dns-query"
     ],
     "direct-nameserver": [
-      "https://1.1.1.1/dns-query",
-      "https://8.8.8.8/dns-query"
+      "https://223.5.5.5/dns-query",
+      "https://doh.pub/dns-query"
     ],
     "direct-nameserver-follow-policy": false,
     "fallback-filter": {
@@ -237,7 +226,7 @@
     "ipv6": false,
     "prefer_ipv6": false,
     "private_ip_answer": true,
-    "dns_direct_system": false,
+    "dns_direct_system": true,
     "dns_direct_fallback_proxy": true,
     "hijack_dns": [
       "8.8.8.8:53",
@@ -268,19 +257,9 @@
       "*.market.xiaomi.com",
       "localhost.ptlogin2.qq.com",
       "*.msftncsi.com",
-      "www.msftconnecttest.com",
-      "csust.edu.cn",
-      "*.csust.edu.cn"
+      "www.msftconnecttest.com"
     ],
-    "host_servers": [
-      {
-        "patterns": [
-          "csust.edu.cn",
-          "*.csust.edu.cn"
-        ],
-        "server": "10.255.255.25"
-      }
-    ]
+    "host_servers": []
   },
   "final": "SEA"
 }

@@ -1,0 +1,91 @@
+// 规则生成器的最小自检：node check.mjs
+// 用一个 DOM 替身加载真实的 app.js，只为了拿到里面的纯函数，不模拟界面。
+import assert from "node:assert/strict";
+import fs from "node:fs";
+
+const read = (name) => fs.readFileSync(new URL(name, import.meta.url), "utf8");
+const stub = new Proxy(function () {}, {
+  get: (target, key) => (key === "value" || key === "textContent" ? "" : stub),
+  set: () => true,
+  apply: () => stub,
+});
+const app = new Function(
+  "document", "fetch", "navigator", "URL", "Blob",
+  `${read("app.js")}\nreturn { rules, validate, validCidr, normalizeStandaloneValue, renderClash, renderShadowrocket, syncGroupKeys };`,
+)(stub, () => Promise.reject(new Error("离线")), stub, URL, stub);
+
+const fixture = () => JSON.parse(read("rules-source.json"));
+const data = fixture();
+const ruleLines = (source) => app.rules(source, "MATCH").map(([rule]) => rule);
+
+// 出厂规则源必须自洽
+app.validate(data);
+
+// IPv6 网段要用 IP-CIDR6，两个客户端都不认 IP-CIDR 带 IPv6
+const withV6 = fixture();
+withV6.routes.push({ name: "IPv6", target: "DIRECT", cidrs: ["fc00::/7", "10.1.0.0/16"] });
+app.validate(withV6);
+assert.ok(ruleLines(withV6).includes("IP-CIDR6,fc00::/7,DIRECT,no-resolve"));
+assert.ok(ruleLines(withV6).includes("IP-CIDR,10.1.0.0/16,DIRECT,no-resolve"));
+
+// 停用的策略组不进输出，但仍保留在规则源里，切换面板不会丢
+const disabled = fixture();
+disabled.routes[0].enabled = false;
+const emitted = new Set(app.rules(disabled, "MATCH").map(([, name]) => name));
+assert.ok(!emitted.has(data.routes[0].name), "停用的策略组不该出现在输出里");
+assert.ok(emitted.has(data.routes[1].name), "启用的策略组必须出现");
+
+// 订阅自带规则必须排在 MATCH 之前，否则永远命中不了
+const main = new Function(`${app.renderClash(data)}\nreturn main;`)();
+const merged = main({ proxies: [{ name: "🇸🇬 SG-01" }], rules: ["DOMAIN,example.com,DIRECT"] });
+const matchAt = merged.rules.findIndex((rule) => rule.startsWith("MATCH,"));
+assert.ok(merged.rules.indexOf("DOMAIN,example.com,DIRECT") < matchAt, "订阅自带规则必须在 MATCH 之前");
+assert.equal(matchAt, merged.rules.length - 1, "MATCH 必须是最后一条");
+assert.deepEqual(merged["proxy-groups"][0].proxies, ["🇸🇬 SG-01"], "正则应把节点筛进对应节点组");
+assert.deepEqual(merged["proxy-groups"][1].proxies, ["DIRECT"], "无匹配节点时应退回 fallback");
+
+// 关键词不能误伤无关域名（keywords: ["line"] 曾把 online / linear 全带走）
+const keywords = ruleLines(data).filter((rule) => rule.startsWith("DOMAIN-KEYWORD,")).map((rule) => rule.split(",")[1]);
+for (const host of ["linear.app", "www.online.example.com", "applebees.com", "pineapple.com", "outline.com", "timeline.example.net"]) {
+  const hit = keywords.find((keyword) => host.includes(keyword));
+  assert.equal(hit, undefined, `关键词「${hit}」误伤了 ${host}`);
+}
+
+// 私有地址指向代理必然不通
+const privateIp = /^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
+for (const rule of ruleLines(data)) {
+  const [kind, value, target] = rule.split(",");
+  if (kind === "IP-CIDR" && privateIp.test(value)) assert.equal(target, "DIRECT", `私有地址 ${value} 不该指向 ${target}`);
+}
+
+// 直连域名和代理域名必须用不同的 DNS，否则国内站点会被解析到远端 CDN
+assert.notDeepEqual(data.mihomo_dns["direct-nameserver"], data.mihomo_dns.nameserver);
+assert.match(app.renderShadowrocket(data), /^dns-direct-system = true$/m);
+assert.match(app.renderShadowrocket(data), /^FINAL,/m);
+
+for (const [value, expected] of [["1.2.3.4/32", true], ["1.2.3.4", false], ["256.0.0.1/8", false], ["10.0.0.0/33", false], ["1.2.3.4/8/8", false], ["2001:db8::/32", true], ["2001:db8::/129", false]]) {
+  assert.equal(app.validCidr(value), expected, `validCidr(${value})`);
+}
+assert.equal(app.normalizeStandaloneValue("1.2.3.4"), "1.2.3.4/32");
+assert.equal(app.normalizeStandaloneValue("2001:db8::1"), "2001:db8::1/128");
+assert.equal(app.normalizeStandaloneValue(" example.com "), "example.com");
+
+// 旧的逐域名目标要报错，不能静默改掉分流方向
+const legacy = fixture();
+legacy.routes[0].domain_targets = ["DIRECT"];
+assert.throws(() => app.validate(legacy), /逐域名目标/);
+
+// 改节点组显示名时，所有引用要跟着换 key；重复执行结果不变
+const keyed = fixture();
+app.syncGroupKeys(keyed);
+const snapshot = JSON.stringify(keyed);
+app.syncGroupKeys(keyed);
+assert.equal(JSON.stringify(keyed), snapshot, "syncGroupKeys 必须幂等");
+const oldKey = keyed.groups[0].target;
+keyed.targets[oldKey] = "🌏 改名了";
+app.syncGroupKeys(keyed);
+app.validate(keyed);
+assert.notEqual(keyed.groups[0].target, oldKey, "改显示名应换 key");
+assert.equal(keyed.targets[keyed.groups[0].target], "🌏 改名了");
+
+console.log("check.mjs 全部通过");

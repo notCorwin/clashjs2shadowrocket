@@ -5,7 +5,12 @@ const summaryEl = document.querySelector("#summary");
 const generatorStatusEl = document.querySelector("#generator-status");
 let source = null;
 let outputType = "clash";
+let currentMode = "generator";
+let flushGenerator = null;
+const LAN_ROUTE = "局域网直连";
 const routeDescriptions = { Apple: "Apple 服务直连", AI: "ChatGPT、Gemini、Claude、Grok、Cursor、Copilot 等 AI 服务", LINE: "LINE 服务", Netflix: "Netflix 与 Fast.com", YouTube: "YouTube 视频服务", TikTok: "TikTok 短视频服务", Google: "Google 服务", "局域网直连": "局域网、保留地址与特殊网段" };
+const defaultOverseasDns = ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"];
+const defaultDomesticDns = ["https://223.5.5.5/dns-query", "https://doh.pub/dns-query"];
 const speedTests = { Cloudflare: "http://cp.cloudflare.com/generate_204", Fast: "https://fast.com", Gstatic: "http://www.gstatic.com/generate_204" };
 const geoipCodes = [["CN", "中国大陆"], ["HK", "香港"], ["TW", "台湾"], ["MO", "澳门"], ["JP", "日本"], ["KR", "韩国"], ["SG", "新加坡"], ["MY", "马来西亚"], ["TH", "泰国"], ["PH", "菲律宾"], ["VN", "越南"], ["ID", "印尼"], ["US", "美国"], ["CA", "加拿大"], ["GB", "英国"], ["DE", "德国"], ["FR", "法国"], ["AU", "澳大利亚"], ["RU", "俄罗斯"], ["IN", "印度"]];
 const geoipName = (code) => { const upper = String(code || "").toUpperCase(); return geoipCodes.find(([value]) => value === upper)?.[1] || `GeoIP ${upper || "??"}`; };
@@ -25,11 +30,7 @@ function targetKeyFromName(name) {
 }
 function mapTargetRefs(data, map) {
   const next = (value) => map[value] || value;
-  for (const route of data.routes || []) {
-    route.target = next(route.target);
-    if (route.domain_targets) route.domain_targets = route.domain_targets.map(next);
-    if (route._domainTargets) route._domainTargets = route._domainTargets.map(next);
-  }
+  for (const route of data.routes || []) route.target = next(route.target);
   for (const item of data.standalone_urls || []) item.target = next(item.target);
   for (const item of data.standalone_rules || []) item.target = next(item.target);
   for (const group of data.groups || []) group.fallback = next(group.fallback);
@@ -79,13 +80,20 @@ const marker = (type) => type === "clash"
 
 function routeDomains(data, route) { return [...(route.domain_sets || []).flatMap((name) => data.rule_sets[name] || []), ...(route.domains || [])]; }
 
+const ruleKinds = ["域名", "关键词", "IP/CIDR", "GeoIP"];
+
 function routeRuleEntries(data, route) {
-  const domainTargets = route.domain_targets || route._domainTargets || [];
   return [
-    ...routeDomains(data, route).map((value, index) => ({ kind: "域名", value, target: domainTargets[index] || route.target })),
-    ...(route.cidrs || []).map((value) => ({ kind: "IP/CIDR", value, target: route.target })),
-    ...(route.geoips || []).map((value) => ({ kind: "GeoIP", value, target: route.target })),
+    ...routeDomains(data, route).map((value) => ({ kind: "域名", value })),
+    ...(route.keywords || []).map((value) => ({ kind: "关键词", value })),
+    ...(route.cidrs || []).map((value) => ({ kind: "IP/CIDR", value })),
+    ...(route.geoips || []).map((value) => ({ kind: "GeoIP", value })),
   ];
+}
+
+function ruleRow(kind, value, label) {
+  const options = ruleKinds.map((item) => `<option ${item === kind ? "selected" : ""}>${item}</option>`).join("");
+  return `<div class="drawer-item drawer-item-plain"><select aria-label="规则类型">${options}</select><input aria-label="${escapeHtml(label)}" value="${escapeHtml(value)}"></div>`;
 }
 
 function ruleGroupName(route, entry) {
@@ -98,6 +106,7 @@ function ruleGroupName(route, entry) {
 function normalizeStandaloneValue(value) {
   const text = String(value || "").trim();
   if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(text)) return `${text}/32`;
+  if (!text.includes("/") && /^[0-9a-f:]*:[0-9a-f:]*$/i.test(text)) return `${text}/128`;
   return text;
 }
 function expandStandaloneUrl(item) {
@@ -105,15 +114,14 @@ function expandStandaloneUrl(item) {
   if (validCidr(value)) return { name: item.name, target: item.target, cidrs: [value] };
   return { name: item.name, target: item.target, domains: [value] };
 }
+const cidrRule = (value, target) => `IP-CIDR${value.includes(":") ? "6" : ""},${value},${target},no-resolve`;
+
 function expandedRoutes(data) {
-  return [...data.routes.flatMap((route) => {
-    const domains = routeDomains(data, route);
-    const domainTargets = route.domain_targets || route._domainTargets;
-    if (!domainTargets?.length) return [{ ...route, domain_sets: [], domains }];
-    const domainRoutes = domains.map((domain, index) => ({ name: route.name, target: domainTargets[index] || route.target, domains: [domain] }));
-    const otherRules = { name: route.name, target: route.target, geoips: route.geoips || [], keywords: route.keywords || [], cidrs: route.cidrs || [] };
-    return [...domainRoutes, ...(otherRules.geoips.length || otherRules.keywords.length || otherRules.cidrs.length ? [otherRules] : [])];
-  }), ...(data.standalone_urls || []).map(expandStandaloneUrl), ...(data.standalone_rules || [])];
+  return [
+    ...data.routes.filter((route) => route.enabled !== false).map((route) => ({ ...route, enabled: undefined, domain_sets: undefined, domains: routeDomains(data, route) })),
+    ...(data.standalone_urls || []).map(expandStandaloneUrl),
+    ...(data.standalone_rules || []),
+  ];
 }
 
 function rules(data, finalType) {
@@ -123,7 +131,7 @@ function rules(data, finalType) {
       ...(route.geoips || []).map((value) => [`GEOIP,${value},${target}`, route.name]),
       ...(route.domains || []).map((value) => [`DOMAIN-SUFFIX,${value},${target}`, route.name]),
       ...(route.keywords || []).map((value) => [`DOMAIN-KEYWORD,${value},${target}`, route.name]),
-      ...(route.cidrs || []).map((value) => [`IP-CIDR,${value},${target},no-resolve`, route.name]),
+      ...(route.cidrs || []).map((value) => [cidrRule(value, target), route.name]),
     ];
   }), [`${finalType},${data.targets[data.final]}`, null]];
 }
@@ -133,7 +141,7 @@ function renderClash(data) {
     target: group.target, pattern: group.pattern, flags: group.flags || "",
     url: group.url, interval: group.interval, tolerance: group.tolerance, fallback: group.fallback,
   }));
-  return `${marker("clash")}\n\nconst TARGETS = Object.freeze(${JSON.stringify(data.targets, null, 2)});\nconst GROUP_CONFIGS = ${JSON.stringify(groups, null, 2)};\nconst ROUTES = ${JSON.stringify(expandedRoutes(data), null, 2)};\nconst FINAL_TARGET = ${JSON.stringify(data.final)};\nconst DNS_CONFIG = ${JSON.stringify(data.mihomo_dns, null, 2)};\n\nfunction compileRoute(route) {\n  const target = TARGETS[route.target];\n  return [\n    ...(route.geoips || []).map((value) => \`GEOIP,\${value},\${target}\`),\n    ...(route.domains || []).map((value) => \`DOMAIN-SUFFIX,\${value},\${target}\`),\n    ...(route.keywords || []).map((value) => \`DOMAIN-KEYWORD,\${value},\${target}\`),\n    ...(route.cidrs || []).map((value) => \`IP-CIDR,\${value},\${target},no-resolve\`),\n  ];\n}\n\nfunction buildProxyGroups(proxies) {\n  return GROUP_CONFIGS.map((group) => {\n    const match = new RegExp(group.pattern, group.flags);\n    const matchedProxies = proxies.filter((proxy) => match.test(proxy.name)).map((proxy) => proxy.name);\n    return { name: TARGETS[group.target], type: "url-test", url: group.url, interval: group.interval, tolerance: group.tolerance, proxies: matchedProxies.length ? matchedProxies : [TARGETS[group.fallback]] };\n  });\n}\n\nfunction main(config) {\n  config["proxy-groups"] ||= [];\n  config["proxy-groups"].unshift(...buildProxyGroups(config.proxies || []));\n  config.dns = DNS_CONFIG;\n  config.rules = [...ROUTES.flatMap(compileRoute), \`MATCH,\${TARGETS[FINAL_TARGET]}\`, ...(config.rules || [])];\n  return config;\n}\n`;
+  return `${marker("clash")}\n\nconst TARGETS = Object.freeze(${JSON.stringify(data.targets, null, 2)});\nconst GROUP_CONFIGS = ${JSON.stringify(groups, null, 2)};\nconst ROUTES = ${JSON.stringify(expandedRoutes(data), null, 2)};\nconst FINAL_TARGET = ${JSON.stringify(data.final)};\nconst DNS_CONFIG = ${JSON.stringify(data.mihomo_dns, null, 2)};\n\nfunction compileRoute(route) {\n  const target = TARGETS[route.target];\n  return [\n    ...(route.geoips || []).map((value) => \`GEOIP,\${value},\${target}\`),\n    ...(route.domains || []).map((value) => \`DOMAIN-SUFFIX,\${value},\${target}\`),\n    ...(route.keywords || []).map((value) => \`DOMAIN-KEYWORD,\${value},\${target}\`),\n    ...(route.cidrs || []).map((value) => \`IP-CIDR\${value.includes(":") ? "6" : ""},\${value},\${target},no-resolve\`),\n  ];\n}\n\nfunction buildProxyGroups(proxies) {\n  return GROUP_CONFIGS.map((group) => {\n    const match = new RegExp(group.pattern, group.flags);\n    const matchedProxies = proxies.filter((proxy) => match.test(proxy.name)).map((proxy) => proxy.name);\n    return { name: TARGETS[group.target], type: "url-test", url: group.url, interval: group.interval, tolerance: group.tolerance, proxies: matchedProxies.length ? matchedProxies : [TARGETS[group.fallback]] };\n  });\n}\n\nfunction main(config) {\n  config["proxy-groups"] ||= [];\n  config["proxy-groups"].unshift(...buildProxyGroups(config.proxies || []));\n  config.dns = DNS_CONFIG;\n  config.rules = [...ROUTES.flatMap(compileRoute), ...(config.rules || []), \`MATCH,\${TARGETS[FINAL_TARGET]}\`];\n  return config;\n}\n`;
 }
 
 function renderShadowrocket(data) {
@@ -181,11 +189,7 @@ function validate(data) {
     for (const setName of route.domain_sets || []) if (!Array.isArray(data.rule_sets[setName])) throw new Error(`规则「${route.name || "未命名"}」引用了未知规则集`);
     for (const field of ["domains", "keywords", "cidrs", "geoips"]) if (route[field] && (!Array.isArray(route[field]) || route[field].some((value) => typeof value !== "string" || !value))) throw new Error(`规则「${route.name || "未命名"}」的 ${field} 配置无效`);
     for (const cidr of route.cidrs || []) if (!validCidr(cidr)) throw new Error(`CIDR 无效：${cidr}`);
-    const domainTargets = route.domain_targets || route._domainTargets;
-    if (domainTargets) {
-      if (!Array.isArray(domainTargets) || domainTargets.length !== routeDomains(data, route).length) throw new Error(`规则「${route.name || "未命名"}」的网址目标数量不匹配`);
-      if (domainTargets.some((target) => !data.targets[target])) throw new Error(`规则「${route.name || "未命名"}」引用了未知网址目标`);
-    }
+    if (route.domain_targets || route._domainTargets) throw new Error(`规则「${route.name || "未命名"}」使用了已移除的逐域名目标，请把这些域名改成独立网址`);
   }
   for (const item of data.standalone_urls || []) {
     const value = normalizeStandaloneValue(item.domain);
@@ -213,27 +217,31 @@ function validate(data) {
 
 function render() {
   try {
-    source = JSON.parse(sourceEl.value); validate(source);
+    const parsed = JSON.parse(sourceEl.value);
+    validate(parsed);
+    source = parsed;
     outputEl.value = outputType === "clash" ? renderClash(source) : renderShadowrocket(source);
     const count = rules(source, "MATCH").length;
-    summaryEl.textContent = `${count} 条规则 · ${source.routes.length} 个策略组 · ${(source.standalone_urls || []).length} 个独立网址 · ${(source.standalone_rules || []).length} 个 GeoIP · 浏览器本地生成`;
+    const enabled = source.routes.filter((route) => route.enabled !== false).length;
+    summaryEl.textContent = `${count} 条规则 · ${enabled} 个策略组 · ${(source.standalone_urls || []).length} 个独立网址 · ${(source.standalone_rules || []).length} 个 GeoIP · 浏览器本地生成`;
     statusEl.textContent = "校验通过"; statusEl.className = ""; generatorStatusEl.textContent = "规则源校验通过"; generatorStatusEl.className = "generator-status";
-  } catch (error) { statusEl.textContent = error.message; statusEl.className = "error"; generatorStatusEl.textContent = error.message; generatorStatusEl.className = "generator-status error"; summaryEl.textContent = "规则源无效"; outputEl.value = ""; }
+    return true;
+  } catch (error) { statusEl.textContent = error.message; statusEl.className = "error"; generatorStatusEl.textContent = error.message; generatorStatusEl.className = "generator-status error"; summaryEl.textContent = "规则源无效"; outputEl.value = ""; return false; }
 }
 
 async function loadDefault() {
-  try { sourceEl.value = JSON.stringify(await (await fetch("rules-source.json")).json(), null, 2); render(); }
-  catch { const message = "无法加载 rules-source.json，请使用下方「导入 JSON」选择本地规则源。"; statusEl.textContent = message; statusEl.className = "error"; generatorStatusEl.textContent = message; generatorStatusEl.className = "generator-status error"; document.querySelector("#converter-toolbar").classList.remove("hidden"); }
+  try {
+    sourceEl.value = JSON.stringify(await (await fetch("rules-source.json")).json(), null, 2);
+    if (render()) setupGenerator(source);
+  } catch {
+    setMode("converter");
+    const message = "无法加载 rules-source.json（用 file:// 直接打开时浏览器会拦截）。请用本地静态服务器打开，或用上方「导入 JSON」选择规则源。";
+    statusEl.textContent = message; statusEl.className = "error"; generatorStatusEl.textContent = message; generatorStatusEl.className = "generator-status error";
+  }
 }
 
 function setupGenerator(data) {
-  if (!data.standalone_urls) {
-    data.standalone_urls = [];
-    for (const route of data.routes.filter((item) => ["Direct", "Daily / SEA"].includes(item.name))) {
-      data.standalone_urls.push(...(route.domains || []).map((domain) => ({ name: domain, domain, target: route.target })));
-      route.domains = [];
-    }
-  }
+  data.standalone_urls ||= [];
   data.standalone_rules = (data.standalone_rules || []).flatMap((item) => {
     if (item.geoips?.length) return item.geoips.map((code) => ({ name: geoipName(code), target: item.target, geoips: [String(code).toUpperCase()] }));
     const values = [...(item.domains || []), ...(item.cidrs || [])];
@@ -241,24 +249,24 @@ function setupGenerator(data) {
     return [];
   });
   let editingRoute = null;
+  let drawerTrigger = null;
+  const drawer = document.querySelector("#domain-drawer");
+  const backdrop = document.querySelector("#drawer-backdrop");
+  const isLanRoute = (route) => route.name === LAN_ROUTE;
   const renderRoutes = () => {
-    const isLanRoute = (route) => route.name === "局域网直连";
-    const routeCount = (route) => routeDomains(data, route).length + (route.keywords || []).length + (route.cidrs || []).length + (route.geoips || []).length;
+    const enabledBox = (route, index) => `<input type="checkbox" aria-label="启用 ${escapeHtml(route.name)}" data-route="${index}" ${route.enabled !== false ? "checked" : ""}>`;
+    const targetSelect = (selected, label, attribute, index) => `<select ${attribute}="${index}" aria-label="${escapeHtml(label)}">${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${selected === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select>`;
+    const actions = (index, editLabel) => `<div class="route-actions"><button type="button" class="edit-domains" data-edit-route="${index}">${editLabel}</button><button type="button" class="remove-route" data-remove-route="${index}">删除</button></div>`;
     const renderRoute = (route, index) => {
-      const count = routeCount(route);
-      return `<div class="route-option"><div><input type="checkbox" aria-label="启用 ${escapeHtml(route.name)}" data-route="${index}" ${route.enabled !== false ? "checked" : ""}><strong>${escapeHtml(route.name)}</strong></div><em>${routeDescriptions[route.name] || "自定义分流规则"} · ${count} 条匹配规则</em><select data-target-route="${index}" aria-label="${escapeHtml(route.name)} 导向节点组">${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${route.target === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><button type="button" class="edit-domains" data-edit-route="${index}">编辑规则列表</button></div>`;
+      const count = routeRuleEntries(data, route).length;
+      return `<div class="route-option"><div>${enabledBox(route, index)}<strong>${escapeHtml(route.name)}</strong></div><em>${routeDescriptions[route.name] || "自定义分流规则"} · ${count} 条匹配规则</em>${targetSelect(route.target, `${route.name} 导向节点组`, "data-target-route", index)}${actions(index, "编辑规则列表")}</div>`;
     };
     const renderBaseRoute = (route, index) => {
-      const entries = [
-        ...(route.cidrs || []).map((value) => ({ kind: "CIDR", value })),
-        ...(route.geoips || []).map((value) => ({ kind: "GeoIP", value })),
-        ...routeDomains(data, route).map((value) => ({ kind: "域名", value })),
-        ...(route.keywords || []).map((value) => ({ kind: "关键词", value })),
-      ];
+      const entries = routeRuleEntries(data, route);
       const list = entries.length
         ? `<ul class="base-rule-list">${entries.map(({ kind, value }) => `<li><code>${escapeHtml(value)}</code><small>${escapeHtml(kind)}</small></li>`).join("")}</ul>`
         : `<p class="base-rule-empty">暂无地址</p>`;
-      return `<div class="route-option base-route"><div><input type="checkbox" aria-label="启用 ${escapeHtml(route.name)}" data-route="${index}" ${route.enabled !== false ? "checked" : ""}><strong>${escapeHtml(route.name)}</strong><span class="base-route-badge">固定直连</span></div><em>${routeDescriptions[route.name] || "局域网、保留地址与特殊网段"} · ${entries.length} 条地址</em>${list}<button type="button" class="edit-domains" data-edit-route="${index}">编辑地址列表</button></div>`;
+      return `<div class="route-option base-route"><div>${enabledBox(route, index)}<strong>${escapeHtml(route.name)}</strong><span class="base-route-badge">固定直连</span></div><em>${routeDescriptions[route.name] || "局域网、保留地址与特殊网段"} · ${entries.length} 条地址</em>${list}${actions(index, "编辑地址列表")}</div>`;
     };
     const routes = data.routes.map((route, index) => ({ route, index }));
     const baseRoutes = routes.filter(({ route }) => isLanRoute(route));
@@ -267,25 +275,27 @@ function setupGenerator(data) {
     document.querySelector("#base-rule-section").classList.toggle("hidden", !baseRoutes.length);
     document.querySelectorAll("[data-route]").forEach((input) => input.onchange = () => { data.routes[input.dataset.route].enabled = input.checked; });
     document.querySelectorAll("[data-target-route]").forEach((select) => select.onchange = () => { data.routes[select.dataset.targetRoute].target = select.value; });
+    document.querySelectorAll("[data-remove-route]").forEach((button) => button.onclick = () => { data.routes.splice(Number(button.dataset.removeRoute), 1); editingRoute = null; renderRoutes(); });
     document.querySelectorAll("[data-edit-route]").forEach((button) => button.onclick = () => {
       editingRoute = Number(button.dataset.editRoute);
+      drawerTrigger = button;
       const route = data.routes[editingRoute];
       const lan = isLanRoute(route);
-      const entries = routeRuleEntries(data, route);
       let previousGroup = null;
       const renderEntry = (entry, index) => {
         const group = ruleGroupName(route, entry);
         const heading = group === previousGroup ? "" : `<h3 class="drawer-group">${escapeHtml(group)}</h3>`;
         previousGroup = group;
-        return `${heading}<div class="drawer-item drawer-item-plain"><span>${entry.kind}</span><input aria-label="${escapeHtml(route.name)} ${entry.kind} ${index + 1}" data-drawer-value="${index}" data-drawer-kind="${entry.kind}" value="${escapeHtml(entry.value)}"></div>`;
+        return heading + ruleRow(entry.kind, entry.value, `${route.name} ${entry.kind} ${index + 1}`);
       };
       document.querySelector("#drawer-title").textContent = lan ? `${route.name} · 地址列表` : `${route.name} · 规则列表`;
       document.querySelector("#domain-drawer > p").textContent = lan ? "始终直连；只需维护地址列表。" : "分流方向由策略组统一决定，这里只维护匹配列表。";
-      document.querySelector("#drawer-items").innerHTML = entries.map(renderEntry).join("");
-      document.querySelector("#drawer-backdrop").classList.remove("hidden");
-      document.querySelector("#domain-drawer").classList.remove("hidden");
-      document.querySelector("#domain-drawer").classList.add("open");
-      document.querySelector("#domain-drawer").setAttribute("aria-hidden", "false");
+      document.querySelector("#drawer-items").innerHTML = routeRuleEntries(data, route).map(renderEntry).join("");
+      backdrop.classList.remove("hidden");
+      drawer.classList.remove("hidden");
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      document.querySelector("#close-drawer").focus();
     });
   };
   renderRoutes();
@@ -318,57 +328,80 @@ function setupGenerator(data) {
   renderRuleLists();
   document.querySelector("#add-geoip").onclick = () => { data.standalone_rules.push({ name: geoipName("CN"), target: "DIRECT", geoips: ["CN"] }); renderRuleLists(); };
   document.querySelector("#add-route").onclick = () => { data.routes.push({ name: `新策略 ${data.routes.length + 1}`, target: "DIRECT", domains: [], keywords: [] }); renderRoutes(); };
+  const closeDrawer = () => {
+    backdrop.classList.add("hidden");
+    drawer.classList.add("hidden");
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
+    drawerTrigger?.focus();
+  };
+  document.querySelector("#add-drawer-item").onclick = () => {
+    document.querySelector("#drawer-items").insertAdjacentHTML("beforeend", ruleRow("域名", "", "新规则"));
+    document.querySelector("#drawer-items").lastElementChild.querySelector("input").focus();
+  };
   document.querySelector("#save-domains").onclick = () => {
     if (editingRoute === null) return;
     const route = data.routes[editingRoute];
-    const entries = [...document.querySelectorAll("[data-drawer-value]")].map((input) => ({ kind: input.dataset.drawerKind, value: input.value.trim() })).filter((entry) => entry.value);
+    const entries = [...document.querySelectorAll("#drawer-items .drawer-item")]
+      .map((row) => ({ kind: row.querySelector("select").value, value: row.querySelector("input").value.trim() }))
+      .filter((entry) => entry.value);
+    const pick = (kind) => entries.filter((entry) => entry.kind === kind).map((entry) => entry.value);
     route.domain_sets = [];
-    route.domains = entries.filter((entry) => entry.kind === "域名").map((entry) => entry.value);
-    route.cidrs = entries.filter((entry) => entry.kind === "IP/CIDR").map((entry) => entry.value);
-    route.geoips = entries.filter((entry) => entry.kind === "GeoIP").map((entry) => entry.value);
-    if (route.name === "局域网直连") route.target = "DIRECT";
-    delete route.domain_targets;
-    delete route._domainTargets;
-    document.querySelector("#drawer-backdrop").click();
+    route.domains = pick("域名");
+    route.keywords = pick("关键词");
+    route.cidrs = pick("IP/CIDR");
+    route.geoips = pick("GeoIP");
+    if (isLanRoute(route)) route.target = "DIRECT";
+    closeDrawer();
     renderRoutes();
   };
-  document.querySelector("#close-drawer").onclick = () => document.querySelector("#drawer-backdrop").click();
-  document.querySelector("#drawer-backdrop").onclick = () => { document.querySelector("#drawer-backdrop").classList.add("hidden"); document.querySelector("#domain-drawer").classList.add("hidden"); document.querySelector("#domain-drawer").classList.remove("open"); document.querySelector("#domain-drawer").setAttribute("aria-hidden", "true"); };
+  document.querySelector("#close-drawer").onclick = closeDrawer;
+  backdrop.onclick = closeDrawer;
+  drawer.onkeydown = (event) => {
+    if (event.key === "Escape") return closeDrawer();
+    if (event.key !== "Tab") return;
+    const focusable = [...drawer.querySelectorAll("button, input, select")];
+    const edge = event.shiftKey ? focusable[0] : focusable.at(-1);
+    if (document.activeElement !== edge) return;
+    event.preventDefault();
+    (event.shiftKey ? focusable.at(-1) : focusable[0]).focus();
+  };
   document.querySelector("#group-interval").value = data.groups[0]?.interval ?? 30;
   document.querySelector("#group-tolerance").value = data.groups[0]?.tolerance ?? 10;
   const groupOptions = document.querySelector("#group-options");
   const dnsOptions = document.querySelector("#dns-options");
-  const defaultOverseasDns = ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"];
-  const applySharedDns = (servers) => {
-    const list = servers.length ? servers : defaultOverseasDns;
+  const applyDns = (overseas, domestic) => {
+    const proxyList = overseas.length ? overseas : defaultOverseasDns;
+    const directList = domestic.length ? domestic : defaultDomesticDns;
     const mihomo = data.mihomo_dns;
     mihomo.enable = true;
-    mihomo["default-nameserver"] = ["1.1.1.1", "8.8.8.8"];
-    mihomo.nameserver = list;
-    mihomo.fallback = [];
-    mihomo["proxy-server-nameserver"] = list;
-    mihomo["direct-nameserver"] = list;
+    mihomo["default-nameserver"] ||= ["223.5.5.5", "119.29.29.29"];
+    mihomo.nameserver = proxyList;
+    mihomo.fallback ||= [];
+    mihomo["proxy-server-nameserver"] = proxyList;
+    mihomo["direct-nameserver"] = directList;
     mihomo["direct-nameserver-follow-policy"] = false;
-    mihomo["fallback-filter"] = { geoip: false, "geoip-code": "CN", geosite: [], ipcidr: [], domain: [] };
+    mihomo["fallback-filter"] ||= { geoip: false, "geoip-code": "CN", geosite: [], ipcidr: [], domain: [] };
     const shadowrocket = data.shadowrocket_dns;
-    shadowrocket.dns_direct_system = false;
-    shadowrocket.servers = list;
-    shadowrocket.fallback_servers = list;
-    shadowrocket.proxy_servers = list;
+    shadowrocket.dns_direct_system = true;
+    shadowrocket.servers = proxyList;
+    shadowrocket.fallback_servers = proxyList;
+    shadowrocket.proxy_servers = proxyList;
   };
-  const looksDomesticDns = (list) => (list || []).some((value) => /doh\.pub|alidns|223\.5\.5\.5|119\.29\.29\.29|^system$/i.test(value));
-  const seedDns = looksDomesticDns(data.mihomo_dns.nameserver) || looksDomesticDns(data.mihomo_dns["direct-nameserver"]) || looksDomesticDns(data.shadowrocket_dns.servers)
-    ? defaultOverseasDns
-    : (data.mihomo_dns.nameserver?.length ? data.mihomo_dns.nameserver : defaultOverseasDns);
-  applySharedDns(seedDns);
   const renderDns = () => {
-    const servers = data.mihomo_dns.nameserver || defaultOverseasDns;
-    dnsOptions.innerHTML = `<div class="dns-card dns-card-simple"><h3>国外 DoH（防污染）</h3>
-      <p class="section-help">只维护这一份列表；会同步到 Clash / Shadowrocket 的主 DNS、直连 DNS 与节点解析 DNS。默认 Cloudflare + Google，使用 IP 形式 DoH，避免再被国内 DNS 污染。</p>
-      <label><span>DNS 服务器</span><textarea id="shared-dns-servers" spellcheck="false">${escapeHtml(servers.join("\n"))}</textarea><small>每行一个；推荐保留至少两个国外 DoH。</small></label>
+    const proxyList = data.mihomo_dns.nameserver?.length ? data.mihomo_dns.nameserver : defaultOverseasDns;
+    const directList = data.mihomo_dns["direct-nameserver"]?.length ? data.mihomo_dns["direct-nameserver"] : defaultDomesticDns;
+    dnsOptions.innerHTML = `<div class="dns-card dns-card-simple"><h3>DNS 分工</h3>
+      <p class="section-help">代理域名用国外 DoH 防污染；直连域名用国内 DoH，否则国内站点会被解析到远端 CDN 而变慢。</p>
+      <label><span>国外 DoH（代理域名）</span><textarea id="overseas-dns-servers" spellcheck="false">${escapeHtml(proxyList.join("\n"))}</textarea><small>每行一个；用 IP 形式 DoH，避免解析 DoH 域名时再被污染。</small></label>
+      <label><span>国内 DoH（直连域名）</span><textarea id="domestic-dns-servers" spellcheck="false">${escapeHtml(directList.join("\n"))}</textarea><small>每行一个；Shadowrocket 对应改用系统 DNS 解析直连域名。</small></label>
     </div>`;
-    const area = document.querySelector("#shared-dns-servers");
-    area.oninput = () => applySharedDns(area.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean));
+    const overseasArea = document.querySelector("#overseas-dns-servers");
+    const domesticArea = document.querySelector("#domestic-dns-servers");
+    const lines = (area) => area.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    const sync = () => applyDns(lines(overseasArea), lines(domesticArea));
+    overseasArea.oninput = sync;
+    domesticArea.oninput = sync;
   };
   const renderGroups = () => {
     groupOptions.innerHTML = data.groups.map((group, index) => `<div class="group-row" data-group="${index}">
@@ -403,7 +436,7 @@ function setupGenerator(data) {
     renderStandalone();
     renderRuleLists();
   };
-  document.querySelector("#generate-button").onclick = () => {
+  flushGenerator = () => {
     groupOptions.querySelectorAll(".group-row").forEach((row) => {
       const group = data.groups[Number(row.dataset.group)];
       row.querySelectorAll("[data-field]").forEach((input) => { group[input.dataset.field] = input.value; });
@@ -417,9 +450,10 @@ function setupGenerator(data) {
     data.routes.forEach((route, index) => { const target = document.querySelector(`[data-target-route="${index}"]`); if (target) route.target = target.value; });
     data.standalone_urls.forEach((item) => { item.domain = normalizeStandaloneValue(item.domain); });
     syncGroupKeys(data);
-    source = JSON.parse(JSON.stringify(data));
-    source.routes = source.routes.filter((route) => route.enabled !== false);
-    sourceEl.value = JSON.stringify(source, null, 2);
+    sourceEl.value = JSON.stringify(data, null, 2);
+  };
+  document.querySelector("#generate-button").onclick = () => {
+    flushGenerator();
     renderGroups();
     renderRoutes();
     renderStandalone();
@@ -433,6 +467,12 @@ function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (character
 
 function setMode(mode) {
   const generator = mode === "generator";
+  // 两个面板共享同一份规则源：切换时把当前面板的编辑结果先落到文本框，避免另一侧静默覆盖
+  if (mode !== currentMode) {
+    if (!generator && flushGenerator) { flushGenerator(); render(); }
+    else if (generator && source) setupGenerator(source);
+  }
+  currentMode = mode;
   document.querySelector("#generator").classList.toggle("hidden", !generator);
   document.querySelector("#converter-toolbar").classList.toggle("hidden", generator);
   document.querySelector("#converter").classList.toggle("hidden", generator);
@@ -441,11 +481,22 @@ function setMode(mode) {
 
 sourceEl.addEventListener("input", render);
 document.querySelector("#format-button").onclick = () => { try { sourceEl.value = JSON.stringify(JSON.parse(sourceEl.value), null, 2); render(); } catch { render(); } };
-document.querySelector("#reset-button").onclick = async () => { await loadDefault(); if (source) setupGenerator(source); };
-document.querySelector("#file-input").onchange = async (event) => { const file = event.target.files[0]; if (file) { sourceEl.value = await file.text(); render(); try { source = JSON.parse(sourceEl.value); validate(source); setupGenerator(source); } catch {} } };
+document.querySelector("#reset-button").onclick = loadDefault;
+document.querySelector("#file-input").onchange = async (event) => {
+  const file = event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+  sourceEl.value = await file.text();
+  if (render()) setupGenerator(source);
+};
 document.querySelectorAll(".tab").forEach((tab) => tab.onclick = () => { document.querySelectorAll(".tab").forEach((item) => { const active = item === tab; item.classList.toggle("active", active); item.setAttribute("aria-selected", String(active)); }); outputType = tab.dataset.output; render(); });
-document.querySelector("#copy-button").onclick = async () => { if (outputEl.value) { await navigator.clipboard.writeText(outputEl.value); statusEl.textContent = "已复制"; } };
+document.querySelector("#copy-button").onclick = async () => {
+  if (!outputEl.value) return;
+  // 非 HTTPS（例如手机用局域网 IP 访问）下没有 navigator.clipboard，退回手动复制
+  try { await navigator.clipboard.writeText(outputEl.value); statusEl.textContent = "已复制"; }
+  catch { outputEl.select(); statusEl.textContent = "已全选，请手动复制（自动复制需要 HTTPS）"; }
+};
 document.querySelector("#download-button").onclick = () => { if (!outputEl.value) return; const ext = outputType === "clash" ? "js" : "conf"; const blob = new Blob([outputEl.value], { type: "text/plain;charset=utf-8" }); const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `generated.${ext}` }); link.click(); URL.revokeObjectURL(link.href); };
 document.querySelector("#export-source-button").onclick = () => { const blob = new Blob([sourceEl.value], { type: "application/json;charset=utf-8" }); const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "rules-source.json" }); link.click(); URL.revokeObjectURL(link.href); };
 document.querySelectorAll(".mode").forEach((button) => button.onclick = () => setMode(button.dataset.mode));
-loadDefault().then(() => { if (source) setupGenerator(source); });
+loadDefault();
