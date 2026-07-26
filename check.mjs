@@ -11,8 +11,15 @@ const stub = new Proxy(function () {}, {
 });
 const app = new Function(
   "document", "fetch", "navigator", "URL", "Blob",
-  `${read("app.js")}\nreturn { rules, validate, validCidr, normalizeStandaloneValue, renderClash, renderShadowrocket, syncGroupKeys };`,
+  `${read("app.js")}\nreturn { rules, validate, validCidr, normalizeStandaloneValue, renderClash, renderShadowrocket, syncGroupKeys, assetUrl };`,
 )(stub, () => Promise.reject(new Error("离线")), stub, URL, stub);
+
+// Safari / GitHub Pages：相对 app.js 才能在无尾斜杠地址上找对文件
+assert.equal(
+  new URL("rules-source.json", "https://example.github.io/repo/app.js").href,
+  "https://example.github.io/repo/rules-source.json",
+);
+assert.equal(app.assetUrl("rules-source.json"), "rules-source.json");
 
 const fixture = () => JSON.parse(read("rules-source.json"));
 const data = fixture();

@@ -2,6 +2,9 @@ const outputEl = document.querySelector("#output");
 const outputStatusEl = document.querySelector("#output-status");
 const summaryEl = document.querySelector("#summary");
 const generatorStatusEl = document.querySelector("#generator-status");
+// Safari 在 /repo（无尾斜杠）时会把相对路径解析到站点根；相对 app.js 定位可避开
+const scriptSrc = typeof document.currentScript?.src === "string" ? document.currentScript.src : "";
+const assetUrl = (name) => (scriptSrc ? new URL(name, scriptSrc).href : name);
 let source = null;
 let outputType = "clash";
 let flushGenerator = null;
@@ -284,15 +287,18 @@ function render() {
 }
 
 async function loadDefault() {
+  const url = assetUrl("rules-source.json");
   try {
-    source = await (await fetch("rules-source.json")).json();
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    source = await response.json();
     validate(source);
     setupGenerator(source);
     generatorStatusEl.textContent = "";
     generatorStatusEl.className = "generator-status";
-  } catch {
-    const message = "无法加载 rules-source.json（用 file:// 直接打开时浏览器会拦截）。请用本地静态服务器打开。";
-    generatorStatusEl.textContent = message; generatorStatusEl.className = "generator-status error";
+  } catch (error) {
+    generatorStatusEl.textContent = `无法加载 rules-source.json：${error.message}`;
+    generatorStatusEl.className = "generator-status error";
   }
 }
 
