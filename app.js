@@ -202,6 +202,45 @@ function setupGenerator(data) {
   document.querySelector("#group-interval").value = data.groups[0]?.interval ?? 30;
   document.querySelector("#group-tolerance").value = data.groups[0]?.tolerance ?? 10;
   const groupOptions = document.querySelector("#group-options");
+  const dnsOptions = document.querySelector("#dns-options");
+  const getNested = (object, path) => path.split(".").reduce((value, key) => value?.[key], object);
+  const setNested = (object, path, value) => { const keys = path.split("."); const last = keys.pop(); const parent = keys.reduce((target, key) => target[key] ||= {}, object); parent[last] = value; };
+  const dnsList = (value) => Array.isArray(value) ? value.join("\\n") : "";
+  const dnsTextarea = (scope, path, label, value, help) => `<label><span>${label}</span><textarea data-dns-list="${scope}" data-dns-path="${path}" spellcheck="false">${escapeHtml(dnsList(value))}</textarea>${help ? `<small>${help}</small>` : ""}</label>`;
+  const renderDns = () => {
+    const mihomo = data.mihomo_dns;
+    const shadowrocket = data.shadowrocket_dns;
+    dnsOptions.innerHTML = `<div class="dns-card"><h3>Clash JS / Mihomo</h3><div class="dns-flags">
+      <label><input type="checkbox" data-dns-flag="mihomo_dns.enable" ${mihomo.enable ? "checked" : ""}>启用 DNS</label>
+      <label><input type="checkbox" data-dns-flag="mihomo_dns.ipv6" ${mihomo.ipv6 ? "checked" : ""}>启用 IPv6</label>
+      <label><input type="checkbox" data-dns-flag="mihomo_dns.prefer-h3" ${mihomo["prefer-h3"] ? "checked" : ""}>优先 HTTP/3</label>
+      <label><input type="checkbox" data-dns-flag="mihomo_dns.respect-rules" ${mihomo["respect-rules"] ? "checked" : ""}>DNS 遵循规则</label>
+    </div><div class="dns-fields">
+      <label><span>增强模式</span><select data-dns-value="mihomo_dns.enhanced-mode"><option value="fake-ip" ${mihomo["enhanced-mode"] === "fake-ip" ? "selected" : ""}>Fake-IP（推荐）</option><option value="redir-host" ${mihomo["enhanced-mode"] === "redir-host" ? "selected" : ""}>Redir-Host（兼容）</option></select><small>Fake-IP 减少重复解析；局域网和 STUN 等地址由过滤列表排除。</small></label>
+      ${dnsTextarea("mihomo_dns", "default-nameserver", "Bootstrap DNS（用于解析 DoH 域名）", mihomo["default-nameserver"], "建议保留至少两个可用地址。此处仅用于启动解析。")}
+      ${dnsTextarea("mihomo_dns", "nameserver", "主 DNS（直连 DoH）", mihomo.nameserver, "优先使用；每行一个 DNS URL。")}
+      ${dnsTextarea("mihomo_dns", "fallback", "Fallback DNS（备用 DoH）", mihomo.fallback, "主 DNS 不可用或命中 fallback-filter 时使用。")}
+      ${dnsTextarea("mihomo_dns", "proxy-server-nameserver", "代理节点解析 DNS", mihomo["proxy-server-nameserver"], "用于解析代理服务器域名，避免依赖代理自身建立连接。")}
+      ${dnsTextarea("mihomo_dns", "direct-nameserver", "直连解析 DNS", mihomo["direct-nameserver"], "直连域名使用的 DNS；建议使用 DoH 而非 system，减少泄漏。")}
+      ${dnsTextarea("mihomo_dns", "fake-ip-filter", "Fake-IP 排除列表", mihomo["fake-ip-filter"], "局域网、NTP、STUN 等需要真实地址的域名。")}
+      ${dnsTextarea("mihomo_dns", "fallback-filter.domain", "Fallback 域名规则", mihomo["fallback-filter"]?.domain, "命中这些域名时优先使用 Fallback DNS。")}
+    </div></div><div class="dns-card"><h3>Shadowrocket</h3><div class="dns-flags">
+      <label><input type="checkbox" data-dns-flag="shadowrocket_dns.ipv6" ${shadowrocket.ipv6 ? "checked" : ""}>启用 IPv6</label>
+      <label><input type="checkbox" data-dns-flag="shadowrocket_dns.prefer_ipv6" ${shadowrocket.prefer_ipv6 ? "checked" : ""}>优先 IPv6</label>
+      <label><input type="checkbox" data-dns-flag="shadowrocket_dns.private_ip_answer" ${shadowrocket.private_ip_answer ? "checked" : ""}>允许私有 IP 响应</label>
+      <label><input type="checkbox" data-dns-flag="shadowrocket_dns.dns_direct_system" ${shadowrocket.dns_direct_system ? "checked" : ""}>允许系统 DNS</label>
+      <label><input type="checkbox" data-dns-flag="shadowrocket_dns.dns_direct_fallback_proxy" ${shadowrocket.dns_direct_fallback_proxy ? "checked" : ""}>Fallback 走代理</label>
+    </div><div class="dns-fields">
+      ${dnsTextarea("shadowrocket_dns", "servers", "主 DNS（DoH / DoT）", shadowrocket.servers, "优先使用的加密 DNS。")}
+      ${dnsTextarea("shadowrocket_dns", "fallback_servers", "Fallback DNS（备用 DoH / DoT）", shadowrocket.fallback_servers, "主 DNS 失败时接管。")}
+      ${dnsTextarea("shadowrocket_dns", "proxy_servers", "代理 DNS", shadowrocket.proxy_servers, "代理链路中的 DNS，建议至少保留两个加密服务。")}
+      ${dnsTextarea("shadowrocket_dns", "hijack_dns", "DNS 劫持地址", shadowrocket.hijack_dns, "拦截常见硬编码 DNS；每行一个 IP。")}
+      ${dnsTextarea("shadowrocket_dns", "always_real_ip", "始终返回真实 IP", shadowrocket.always_real_ip, "局域网、NTP、STUN 等必须绕过 Fake-IP 的域名。")}
+    </div></div>`;
+    dnsOptions.querySelectorAll("[data-dns-list]").forEach((field) => field.oninput = () => setNested(data[field.dataset.dnsList], field.dataset.dnsPath, field.value.split(/\\r?\\n/).map((value) => value.trim()).filter(Boolean)));
+    dnsOptions.querySelectorAll("[data-dns-flag]").forEach((field) => field.onchange = () => { const [scope, ...path] = field.dataset.dnsFlag.split("."); setNested(data[scope], path.join("."), field.checked); });
+    dnsOptions.querySelectorAll("[data-dns-value]").forEach((field) => field.onchange = () => { const [scope, ...path] = field.dataset.dnsValue.split("."); setNested(data[scope], path.join("."), field.value); });
+  };
   const renderGroups = () => {
     groupOptions.innerHTML = data.groups.map((group, index) => `<div class="group-row" data-group="${index}">
       <label><span>策略键</span><input readonly value="${escapeHtml(group.target)}"><small>稳定的规则引用名称</small></label>
@@ -212,6 +251,7 @@ function setupGenerator(data) {
     groupOptions.querySelectorAll("[data-remove-group]").forEach((button) => button.onclick = () => { const index = Number(button.dataset.removeGroup); const removed = data.groups[index]; data.groups.splice(index, 1); delete data.targets[removed.target]; data.routes.forEach((route) => { if (route.target === removed.target) route.target = "DIRECT"; }); data.standalone_urls?.forEach((item) => { if (item.target === removed.target) item.target = "DIRECT"; }); data.standalone_rules?.forEach((item) => { if (item.target === removed.target) item.target = "DIRECT"; }); data.groups.forEach((group) => { if (group.fallback === removed.target) group.fallback = "DIRECT"; }); if (data.final === removed.target) data.final = "DIRECT"; renderGroups(); renderRoutes(); renderStandalone(); renderRuleLists(); });
   };
   renderGroups();
+  renderDns();
   document.querySelector("#add-group").onclick = () => { let n = data.groups.length + 1; let target = `GROUP_${n}`; while (data.targets[target]) target = `GROUP_${++n}`; data.targets[target] = target; data.groups.push({ target, pattern: "(节点|Node)", flags: "i", url: speedTests.Gstatic, interval: 30, tolerance: 10, fallback: "DIRECT" }); renderGroups(); renderRoutes(); renderStandalone(); renderRuleLists(); };
   document.querySelector("#generate-button").onclick = () => {
     source = JSON.parse(JSON.stringify(data));

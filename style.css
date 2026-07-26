@@ -84,6 +84,16 @@ details { margin-top: 28px; padding-top: 17px; border-top: 1px solid var(--line)
 details summary { cursor: pointer; color: var(--text); font-weight: 650; }
 .shared-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 240px)); gap: 14px; padding-top: 16px; }
 .group-options { display: grid; gap: 18px; padding-top: 20px; }
+.dns-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; padding-top: 16px; }
+.dns-card { padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.012); }
+.dns-card h3 { margin: 0 0 12px; font-size: 14px; }
+.dns-flags { display: flex; flex-wrap: wrap; gap: 12px 18px; margin-bottom: 14px; }
+.dns-flags label { color: var(--text); font-size: 12px; }
+.dns-flags input { margin-right: 6px; accent-color: var(--accent); }
+.dns-fields { display: grid; gap: 12px; }
+.dns-fields label > span { display: block; margin-bottom: 6px; color: var(--text); font-size: 12px; }
+.dns-fields textarea { min-height: 76px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: #dbe8d4; font: 12px/1.6 var(--mono); }
+.dns-fields small { display: block; margin-top: 5px; color: var(--faint); font-size: 10px; }
 .group-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 14px; align-items: end; }
 .group-row label, .shared-settings label { min-width: 0; }
 .group-row label > span, .shared-settings label > span { display: block; margin-bottom: 6px; color: var(--text); font-size: 12px; }
@@ -137,7 +147,7 @@ a { color: var(--muted); text-decoration: none; } a:hover { color: var(--accent)
   .generator-head button { width: 100%; }
   .workspace { grid-template-columns: 1fr; }
   textarea { min-height: 400px; }
-  .shared-settings, .group-row, .standalone-row, .standalone-rule { grid-template-columns: 1fr; }
+  .shared-settings, .group-row, .standalone-row, .standalone-rule, .dns-options { grid-template-columns: 1fr; }
   .group-row label:nth-child(n+2):nth-child(-n+4) { grid-column: auto; }
   .standalone-rule textarea, .standalone-rule [data-rule-target], .standalone-rule button { grid-column: 1; grid-row: auto; }
 }
