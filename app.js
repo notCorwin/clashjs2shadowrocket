@@ -18,7 +18,8 @@ let outputType = "clash";
 let flushGenerator = null;
 const LAN_ROUTE = "局域网直连";
 const routeDescriptions = { Apple: "Apple 服务直连", AI: "ChatGPT、Gemini、Claude、Grok、Cursor、Copilot 等 AI 服务", LINE: "LINE 服务", Netflix: "Netflix 与 Fast.com", YouTube: "YouTube 视频服务", TikTok: "TikTok 短视频服务", Google: "Google 服务", "局域网直连": "局域网、保留地址与特殊网段" };
-// 国外 DoH 用 IP，避免解析 DoH 域名时再被污染；国内 DoH 只服务直连域名
+// 国外 DoH 用 IP，避免解析 DoH 域名时再被污染。
+// 节点域名必须在翻墙前解析，只能走国内 DoH（1.1.1.1 本身往往要翻墙才能到）。
 const defaultOverseasDns = ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"];
 const defaultDomesticDns = ["https://223.5.5.5/dns-query", "https://1.12.0.2/dns-query"];
 const defaultFakeIpFilter = ["*.lan", "*.local", "*.localhost", "+.internal", "+.home.arpa", "+.arpa", "time.*.com", "ntp.*.com", "+.stun.*", "stun.*", "*.msftconnecttest.com", "www.msftconnecttest.com"];
@@ -217,7 +218,7 @@ function ensureDns(data) {
     "fake-ip-filter": [...defaultFakeIpFilter],
     nameserver: data.dns.overseas,
     fallback: [],
-    "proxy-server-nameserver": data.dns.overseas,
+    "proxy-server-nameserver": data.dns.domestic,
     "direct-nameserver": data.dns.domestic,
     "direct-nameserver-follow-policy": false,
     "fallback-filter": { geoip: false, "geoip-code": "CN", geosite: [], ipcidr: [], domain: [] },
@@ -229,8 +230,9 @@ function ensureDns(data) {
     dns_direct_system: true,
     dns_direct_fallback_proxy: true,
     hijack_dns: [...defaultHijackDns],
-    servers: data.dns.overseas,
-    fallback_servers: data.dns.overseas,
+    // dns-server 直连解析（含节点域名）；proxy-dns-server 走代理后再查，可用国外 DoH
+    servers: data.dns.domestic,
+    fallback_servers: data.dns.domestic,
     proxy_servers: data.dns.overseas,
     always_real_ip: [...defaultAlwaysRealIp],
     host_servers: [],
@@ -451,9 +453,9 @@ function setupGenerator(data) {
   const renderDns = () => {
     ensureDns(data);
     dnsOptions.innerHTML = `<div class="dns-card dns-card-simple"><h3>DNS 分工</h3>
-      <p class="section-help">代理域名用国外 DoH 防污染；直连域名用国内 DoH，否则国内站点会被解析到远端 CDN 而变慢。其余 DNS 选项使用内置默认值。</p>
-      <label><span>国外 DoH（代理域名）</span><textarea id="overseas-dns-servers" spellcheck="false">${escapeHtml(data.dns.overseas.join("\n"))}</textarea><small>每行一个；用 IP 形式 DoH，避免解析 DoH 域名时再被污染。</small></label>
-      <label><span>国内 DoH（直连域名）</span><textarea id="domestic-dns-servers" spellcheck="false">${escapeHtml(data.dns.domestic.join("\n"))}</textarea><small>每行一个；Shadowrocket 直连域名改用系统 DNS。</small></label>
+      <p class="section-help">节点域名和直连域名必须用国内 DoH（建连前不能依赖 1.1.1.1）；代理流量侧再用国外 DoH 防污染。其余选项用内置默认值。</p>
+      <label><span>国外 DoH（经代理查询）</span><textarea id="overseas-dns-servers" spellcheck="false">${escapeHtml(data.dns.overseas.join("\n"))}</textarea><small>每行一个；Clash nameserver / Shadowrocket proxy-dns-server。用 IP 形式 DoH。</small></label>
+      <label><span>国内 DoH（节点与直连）</span><textarea id="domestic-dns-servers" spellcheck="false">${escapeHtml(data.dns.domestic.join("\n"))}</textarea><small>每行一个；解析代理节点域名，以及直连站点。Shadowrocket 直连仍可走系统 DNS。</small></label>
     </div>`;
     const overseasArea = document.querySelector("#overseas-dns-servers");
     const domesticArea = document.querySelector("#domestic-dns-servers");

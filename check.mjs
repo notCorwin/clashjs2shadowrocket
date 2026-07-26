@@ -66,10 +66,13 @@ for (const rule of ruleLines(data)) {
   if (kind === "IP-CIDR" && privateIp.test(value)) assert.equal(target, "DIRECT", `私有地址 ${value} 不该指向 ${target}`);
 }
 
-// 直连域名和代理域名必须用不同的 DNS，否则国内站点会被解析到远端 CDN
+// 直连/节点 DNS 与经代理 DNS 必须分开；节点解析绝不能依赖 1.1.1.1
 assert.ok(data.dns?.overseas?.length && data.dns?.domestic?.length, "应展开默认 DNS 列表");
 assert.notDeepEqual(data.dns.overseas, data.dns.domestic);
 assert.notDeepEqual(data.mihomo_dns["direct-nameserver"], data.mihomo_dns.nameserver);
+assert.deepEqual(data.mihomo_dns["proxy-server-nameserver"], data.dns.domestic);
+assert.deepEqual(data.shadowrocket_dns.servers, data.dns.domestic);
+assert.deepEqual(data.shadowrocket_dns.proxy_servers, data.dns.overseas);
 assert.match(app.renderShadowrocket(data), /^dns-direct-system = true$/m);
 assert.match(app.renderShadowrocket(data), /^FINAL,/m);
 // 规则源不必手写完整 DNS；缺省时用内置默认值
@@ -79,6 +82,8 @@ assert.equal(bare.shadowrocket_dns, undefined);
 app.validate(bare);
 assert.deepEqual(bare.dns.overseas, ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"]);
 assert.deepEqual(bare.dns.domestic, ["https://223.5.5.5/dns-query", "https://1.12.0.2/dns-query"]);
+assert.deepEqual(bare.mihomo_dns["proxy-server-nameserver"], bare.dns.domestic);
+assert.match(app.renderShadowrocket(bare), /^dns-server = https:\/\/223\.5\.5\.5\/dns-query,/m);
 
 for (const [value, expected] of [["1.2.3.4/32", true], ["1.2.3.4", false], ["256.0.0.1/8", false], ["10.0.0.0/33", false], ["1.2.3.4/8/8", false], ["2001:db8::/32", true], ["2001:db8::/129", false]]) {
   assert.equal(app.validCidr(value), expected, `validCidr(${value})`);
