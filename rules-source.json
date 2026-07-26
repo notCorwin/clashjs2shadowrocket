@@ -148,8 +148,8 @@
     { "name": "OKX", "domain": "okx.com", "target": "SEA" },
     { "name": "1Password", "domain": "1password.com", "target": "DIRECT" },
     { "name": "Immersive Translate", "domain": "immersivetranslate.com", "target": "DIRECT" },
-    { "name": "路由云", "domain": "luyuyun.net", "target": "DIRECT" },
-    { "name": "路由云镜像", "domain": "luyuyun.cc", "target": "DIRECT" },
+    { "name": "鹿语云", "domain": "luyuyun.net", "target": "DIRECT" },
+    { "name": "鹿语云镜像", "domain": "luyuyun.cc", "target": "DIRECT" },
     { "name": "ITSSX", "domain": "itssx.com", "target": "DIRECT" },
     { "name": "CSUST", "domain": "csust.edu.cn", "target": "DIRECT" },
     { "name": "OpenRouter", "domain": "openrouter.ai", "target": "DIRECT" }
