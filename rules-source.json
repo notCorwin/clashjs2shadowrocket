@@ -33,10 +33,17 @@
       "oaiusercontent.com",
       "api.openai.com",
       "gemini.google.com",
+      "generativelanguage.googleapis.com",
+      "ai.google.dev",
       "claude.ai",
       "anthropic.com",
       "claudeusercontent.com",
-      "perplexity.ai"
+      "perplexity.ai",
+      "x.ai",
+      "grok.com",
+      "cursor.com",
+      "cursor.sh",
+      "copilot.microsoft.com"
     ],
     "apple": [
       "apple-relay.akamaized.net",
@@ -45,7 +52,11 @@
       "apple-relay.fastly-edge.com",
       "apple-relay.mask.apple-dns.net",
       "apple.com",
-      "icloud.com"
+      "icloud.com",
+      "icloud-content.com",
+      "me.com",
+      "mzstatic.com",
+      "cdn-apple.com"
     ],
     "netflix": [
       "netflix.com",
@@ -60,18 +71,24 @@
       "tiktok.com",
       "tiktokv.com",
       "tiktokcdn.com",
+      "tiktokcdn-us.com",
+      "ttlivecdn.com",
+      "byteoversea.com",
       "musical.ly",
       "muscdn.com",
       "youtu.be",
       "ytimg.com",
-      "youtube.com"
+      "youtube.com",
+      "youtube-nocookie.com"
     ],
     "google": [
       "googleapis.com",
       "gstatic.com",
       "ggpht.com",
       "google.com",
-      "googleusercontent.com"
+      "googleusercontent.com",
+      "withgoogle.com",
+      "googleadservices.com"
     ],
     "line": [
       "line.naver.jp",
@@ -108,12 +125,12 @@
     {
       "name": "YouTube",
       "target": "SEA",
-      "domains": ["youtu.be", "ytimg.com", "googlevideo.com", "youtube.com"]
+      "domains": ["youtu.be", "ytimg.com", "googlevideo.com", "youtube.com", "youtube-nocookie.com"]
     },
     {
       "name": "TikTok",
       "target": "SEA",
-      "domains": ["tiktok.com", "tiktokv.com", "tiktokcdn.com", "musical.ly", "muscdn.com"],
+      "domains": ["tiktok.com", "tiktokv.com", "tiktokcdn.com", "tiktokcdn-us.com", "ttlivecdn.com", "byteoversea.com", "musical.ly", "muscdn.com"],
       "keywords": ["tiktok"]
     },
     {

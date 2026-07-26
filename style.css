@@ -75,11 +75,21 @@ button:hover, .file-button:hover { border-color: var(--accent); color: var(--acc
 .section-help { margin: 7px 0 0; color: var(--muted); font-size: 12px; }
 .standalone-options { display: grid; gap: 10px; margin: 12px 0 4px; }
 .standalone-row { display: grid; grid-template-columns: 1.3fr 1.8fr 1fr auto; gap: 8px; align-items: center; }
-.standalone-row button, .standalone-rule button, .group-row button { padding: 8px 10px; border-color: transparent; background: transparent; color: var(--danger); }
-.standalone-row button:hover, .standalone-rule button:hover, .group-row button:hover { border-color: #704848; background: #301e20; }
+.geoip-row { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr) auto; gap: 8px; align-items: center; }
+.geoip-row select { display: block; width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--text); font: 12px var(--mono); cursor: pointer; }
+.standalone-row button, .standalone-rule button, .geoip-row button, .group-row button { padding: 8px 10px; border-color: transparent; background: transparent; color: var(--danger); }
+.standalone-row button:hover, .standalone-rule button:hover, .geoip-row button:hover, .group-row button:hover { border-color: #704848; background: #301e20; }
 .add-group { margin-top: 11px; border-style: dashed; background: transparent; color: var(--muted); font-size: 12px; }
 
 .base-rule-section { padding-top: 1px; }
+.base-rule-options { grid-template-columns: 1fr; }
+.base-route em { min-height: 0; }
+.base-route-badge { margin-left: 8px; color: var(--muted); font-size: 11px; font-weight: 500; }
+.base-rule-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 4px 24px; padding: 0; list-style: none; }
+.base-rule-list li { display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.base-rule-list code { font: 11px/1.3 var(--mono); color: var(--text); }
+.base-rule-list small { color: var(--muted); font-size: 10px; }
+.base-rule-empty { margin: 0 0 4px 24px; color: var(--muted); font-size: 12px; }
 details { margin-top: 28px; padding-top: 17px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 details summary { cursor: pointer; color: var(--text); font-weight: 650; }
 .shared-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 240px)); gap: 14px; padding-top: 16px; }
@@ -94,7 +104,7 @@ details summary { cursor: pointer; color: var(--text); font-weight: 650; }
 .dns-fields label > span { display: block; margin-bottom: 6px; color: var(--text); font-size: 12px; }
 .dns-fields textarea { min-height: 76px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: #dbe8d4; font: 12px/1.6 var(--mono); }
 .dns-fields small { display: block; margin-top: 5px; color: var(--faint); font-size: 10px; }
-.group-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 14px; align-items: end; }
+.group-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 14px; align-items: end; }
 .group-row label, .shared-settings label { min-width: 0; }
 .group-row label > span, .shared-settings label > span { display: block; margin-bottom: 6px; color: var(--text); font-size: 12px; }
 .group-row small, .shared-settings small { display: block; margin-top: 5px; color: var(--faint); font-size: 10px; line-height: 1.3; }
@@ -122,12 +132,12 @@ textarea { display: block; width: 100%; min-height: 620px; padding: 18px; border
 .domain-drawer p { color: var(--muted); font-size: 12px; }
 .drawer-group { margin: 18px 0 8px; padding: 8px 10px; border: 1px solid #3b5130; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font: 11px var(--mono); }
 .drawer-item { display: grid; grid-template-columns: auto minmax(0,1.5fr) minmax(0,1fr); gap: 8px; align-items: center; margin: 9px 0; }
+.drawer-item.drawer-item-plain { grid-template-columns: auto 1fr; }
 .drawer-item > span { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .save-domains { width: 100%; margin-top: 14px; }
 
 footer { display: flex; justify-content: space-between; padding-top: 20px; color: var(--faint); font-size: 12px; }
 a { color: var(--muted); text-decoration: none; } a:hover { color: var(--accent); }
-.geoip-rule { padding: 10px; border-left: 3px solid var(--accent); border-radius: 7px; background: var(--accent-soft); }
 .standalone-rule { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) auto; gap: 8px; align-items: start; }
 .standalone-rule textarea { grid-column: 1 / -1; grid-row: 2; min-height: 86px; resize: vertical; }
 .standalone-rule [data-rule-target] { grid-column: 3; grid-row: 1; }
@@ -147,7 +157,7 @@ a { color: var(--muted); text-decoration: none; } a:hover { color: var(--accent)
   .generator-head button { width: 100%; }
   .workspace { grid-template-columns: 1fr; }
   textarea { min-height: 400px; }
-  .shared-settings, .group-row, .standalone-row, .standalone-rule, .dns-options { grid-template-columns: 1fr; }
+  .shared-settings, .group-row, .standalone-row, .geoip-row, .standalone-rule, .dns-options { grid-template-columns: 1fr; }
   .group-row label:nth-child(n+2):nth-child(-n+4) { grid-column: auto; }
   .standalone-rule textarea, .standalone-rule [data-rule-target], .standalone-rule button { grid-column: 1; grid-row: auto; }
 }

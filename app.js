@@ -5,16 +5,72 @@ const summaryEl = document.querySelector("#summary");
 const generatorStatusEl = document.querySelector("#generator-status");
 let source = null;
 let outputType = "clash";
-const routeDescriptions = { Apple: "Apple 服务直连", AI: "ChatGPT、Gemini、Claude、Perplexity 等 AI 服务", LINE: "LINE 服务", Netflix: "Netflix 与 Fast.com", YouTube: "YouTube 视频服务", TikTok: "TikTok 短视频服务", Google: "Google 服务", "局域网直连": "局域网、保留地址与特殊网段" };
+const routeDescriptions = { Apple: "Apple 服务直连", AI: "ChatGPT、Gemini、Claude、Grok、Cursor、Copilot 等 AI 服务", LINE: "LINE 服务", Netflix: "Netflix 与 Fast.com", YouTube: "YouTube 视频服务", TikTok: "TikTok 短视频服务", Google: "Google 服务", "局域网直连": "局域网、保留地址与特殊网段" };
 const speedTests = { Cloudflare: "http://cp.cloudflare.com/generate_204", Fast: "https://fast.com", Gstatic: "http://www.gstatic.com/generate_204" };
+const geoipCodes = [["CN", "中国大陆"], ["HK", "香港"], ["TW", "台湾"], ["MO", "澳门"], ["JP", "日本"], ["KR", "韩国"], ["SG", "新加坡"], ["MY", "马来西亚"], ["TH", "泰国"], ["PH", "菲律宾"], ["VN", "越南"], ["ID", "印尼"], ["US", "美国"], ["CA", "加拿大"], ["GB", "英国"], ["DE", "德国"], ["FR", "法国"], ["AU", "澳大利亚"], ["RU", "俄罗斯"], ["IN", "印度"]];
+const geoipName = (code) => { const upper = String(code || "").toUpperCase(); return geoipCodes.find(([value]) => value === upper)?.[1] || `GeoIP ${upper || "??"}`; };
+const geoipOptions = (selected) => {
+  const upper = String(selected || "CN").toUpperCase();
+  const codes = new Map(geoipCodes);
+  if (upper && !codes.has(upper)) codes.set(upper, upper);
+  return [...codes.entries()].map(([code, label]) => `<option value="${escapeHtml(code)}" ${code === upper ? "selected" : ""}>${escapeHtml(code)} · ${escapeHtml(label)}</option>`).join("");
+};
+function targetKeyFromName(name) {
+  let hash = 2166136261;
+  for (const char of String(name)) {
+    hash ^= char.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0").slice(0, 6);
+}
+function mapTargetRefs(data, map) {
+  const next = (value) => map[value] || value;
+  for (const route of data.routes || []) {
+    route.target = next(route.target);
+    if (route.domain_targets) route.domain_targets = route.domain_targets.map(next);
+    if (route._domainTargets) route._domainTargets = route._domainTargets.map(next);
+  }
+  for (const item of data.standalone_urls || []) item.target = next(item.target);
+  for (const item of data.standalone_rules || []) item.target = next(item.target);
+  for (const group of data.groups || []) group.fallback = next(group.fallback);
+  data.final = next(data.final);
+}
+function syncGroupKeys(data) {
+  const assignments = data.groups.map((group) => {
+    const display = String(data.targets[group.target] || group.target).trim() || "未命名节点组";
+    return { group, display, from: group.target };
+  });
+  const used = new Set(["DIRECT"]);
+  for (const item of assignments) {
+    let key = targetKeyFromName(item.display);
+    let n = 0;
+    while (used.has(key)) key = targetKeyFromName(`${item.display}\0${++n}`);
+    used.add(key);
+    item.to = key;
+  }
+  const remap = Object.fromEntries(assignments.filter((item) => item.from !== item.to).map((item) => [item.from, item.to]));
+  for (const group of data.groups) delete data.targets[group.target];
+  for (const item of assignments) {
+    item.group.target = item.to;
+    data.targets[item.to] = item.display;
+  }
+  if (Object.keys(remap).length) mapTargetRefs(data, remap);
+  data.targets.DIRECT ||= "DIRECT";
+}
+function allocateGroupKey(data, display) {
+  let key = targetKeyFromName(display);
+  let n = 0;
+  while (data.targets[key]) key = targetKeyFromName(`${display}\0${++n}`);
+  return key;
+}
 const ruleGroupPatterns = {
-  Apple: [{ name: "Apple Relay", domains: ["apple-relay.akamaized.net", "apple-relay.apple.com", "apple-relay.cloudflare.com", "apple-relay.fastly-edge.com", "apple-relay.mask.apple-dns.net"] }, { name: "Apple 服务", domains: ["apple.com", "icloud.com"] }],
-  AI: [{ name: "ChatGPT", domains: ["openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com"] }, { name: "Gemini", domains: ["gemini.google.com"] }, { name: "Claude", domains: ["claude.ai", "anthropic.com", "claudeusercontent.com"] }, { name: "Perplexity", domains: ["perplexity.ai"] }],
+  Apple: [{ name: "Apple Relay", domains: ["apple-relay.akamaized.net", "apple-relay.apple.com", "apple-relay.cloudflare.com", "apple-relay.fastly-edge.com", "apple-relay.mask.apple-dns.net"] }, { name: "Apple 服务", domains: ["apple.com", "icloud.com", "icloud-content.com", "me.com", "mzstatic.com", "cdn-apple.com"] }],
+  AI: [{ name: "ChatGPT", domains: ["openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com", "api.openai.com"] }, { name: "Gemini", domains: ["gemini.google.com", "generativelanguage.googleapis.com", "ai.google.dev"] }, { name: "Claude", domains: ["claude.ai", "anthropic.com", "claudeusercontent.com"] }, { name: "Perplexity", domains: ["perplexity.ai"] }, { name: "Grok", domains: ["x.ai", "grok.com"] }, { name: "Cursor", domains: ["cursor.com", "cursor.sh"] }, { name: "Copilot", domains: ["copilot.microsoft.com"] }],
   LINE: [{ name: "LINE CDN", domains: ["line-cdn.net", "line-scdn.net"] }, { name: "LINE 服务", domains: ["line.naver.jp", "line.me", "line-apps.com"] }],
   Netflix: [{ name: "Netflix 主站", domains: ["netflix.com", "netflix.net"] }, { name: "Netflix CDN", domains: ["nflximg.net", "nflxvideo.net", "nflxso.net", "nflxext.com"] }, { name: "Fast.com", domains: ["fast.com"] }],
-  YouTube: [{ name: "YouTube 短链接", domains: ["youtu.be"] }, { name: "YouTube CDN", domains: ["ytimg.com", "googlevideo.com"] }, { name: "YouTube 主站", domains: ["youtube.com"] }],
-  TikTok: [{ name: "TikTok 主站", domains: ["tiktok.com", "tiktokv.com"] }, { name: "TikTok CDN", domains: ["tiktokcdn.com"] }, { name: "Musical.ly", domains: ["musical.ly", "muscdn.com"] }],
-  Google: [{ name: "Google API", domains: ["googleapis.com"] }, { name: "Google 静态资源", domains: ["gstatic.com", "ggpht.com"] }, { name: "Google 主站", domains: ["google.com"] }, { name: "Google 视频", domains: ["googlevideo.com"] }, { name: "Google 用户内容", domains: ["googleusercontent.com"] }],
+  YouTube: [{ name: "YouTube 短链接", domains: ["youtu.be"] }, { name: "YouTube CDN", domains: ["ytimg.com", "googlevideo.com"] }, { name: "YouTube 主站", domains: ["youtube.com", "youtube-nocookie.com"] }],
+  TikTok: [{ name: "TikTok 主站", domains: ["tiktok.com", "tiktokv.com"] }, { name: "TikTok CDN", domains: ["tiktokcdn.com", "tiktokcdn-us.com", "ttlivecdn.com", "byteoversea.com"] }, { name: "Musical.ly", domains: ["musical.ly", "muscdn.com"] }],
+  Google: [{ name: "Google API", domains: ["googleapis.com"] }, { name: "Google 静态资源", domains: ["gstatic.com", "ggpht.com"] }, { name: "Google 主站", domains: ["google.com", "withgoogle.com"] }, { name: "Google 广告", domains: ["googleadservices.com"] }, { name: "Google 视频", domains: ["googlevideo.com"] }, { name: "Google 用户内容", domains: ["googleusercontent.com"] }],
 };
 
 const marker = (type) => type === "clash"
@@ -170,33 +226,101 @@ function setupGenerator(data) {
   }
   let editingRoute = null;
   const renderRoutes = () => {
+    const isLanRoute = (route) => route.name === "局域网直连";
+    const routeCount = (route) => routeDomains(data, route).length + (route.keywords || []).length + (route.cidrs || []).length + (route.geoips || []).length;
     const renderRoute = (route, index) => {
-      const count = routeDomains(data, route).length + (route.keywords || []).length + (route.cidrs || []).length + (route.geoips || []).length;
+      const count = routeCount(route);
       return `<div class="route-option"><div><input type="checkbox" aria-label="启用 ${escapeHtml(route.name)}" data-route="${index}" ${route.enabled !== false ? "checked" : ""}><strong>${escapeHtml(route.name)}</strong></div><em>${routeDescriptions[route.name] || "自定义分流规则"} · ${count} 条匹配规则</em><select data-target-route="${index}" aria-label="${escapeHtml(route.name)} 导向节点组">${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${route.target === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><button type="button" class="edit-domains" data-edit-route="${index}">编辑规则列表</button></div>`;
     };
+    const renderBaseRoute = (route, index) => {
+      const entries = [
+        ...(route.cidrs || []).map((value) => ({ kind: "CIDR", value })),
+        ...(route.geoips || []).map((value) => ({ kind: "GeoIP", value })),
+        ...routeDomains(data, route).map((value) => ({ kind: "域名", value })),
+        ...(route.keywords || []).map((value) => ({ kind: "关键词", value })),
+      ];
+      const list = entries.length
+        ? `<ul class="base-rule-list">${entries.map(({ kind, value }) => `<li><code>${escapeHtml(value)}</code><small>${escapeHtml(kind)}</small></li>`).join("")}</ul>`
+        : `<p class="base-rule-empty">暂无地址</p>`;
+      return `<div class="route-option base-route"><div><input type="checkbox" aria-label="启用 ${escapeHtml(route.name)}" data-route="${index}" ${route.enabled !== false ? "checked" : ""}><strong>${escapeHtml(route.name)}</strong><span class="base-route-badge">固定直连</span></div><em>${routeDescriptions[route.name] || "局域网、保留地址与特殊网段"} · ${entries.length} 条地址</em>${list}<button type="button" class="edit-domains" data-edit-route="${index}">编辑地址列表</button></div>`;
+    };
     const routes = data.routes.map((route, index) => ({ route, index }));
-    const baseRoutes = routes.filter(({ route }) => route.name === "局域网直连");
-    document.querySelector("#route-options").innerHTML = routes.filter(({ route }) => route.name !== "局域网直连").map(({ route, index }) => renderRoute(route, index)).join("");
-    document.querySelector("#base-rule-options").innerHTML = baseRoutes.map(({ route, index }) => renderRoute(route, index)).join("");
+    const baseRoutes = routes.filter(({ route }) => isLanRoute(route));
+    document.querySelector("#route-options").innerHTML = routes.filter(({ route }) => !isLanRoute(route)).map(({ route, index }) => renderRoute(route, index)).join("");
+    document.querySelector("#base-rule-options").innerHTML = baseRoutes.map(({ route, index }) => renderBaseRoute(route, index)).join("");
     document.querySelector("#base-rule-section").classList.toggle("hidden", !baseRoutes.length);
     document.querySelectorAll("[data-route]").forEach((input) => input.onchange = () => { data.routes[input.dataset.route].enabled = input.checked; });
     document.querySelectorAll("[data-target-route]").forEach((select) => select.onchange = () => { data.routes[select.dataset.targetRoute].target = select.value; });
-    document.querySelectorAll("[data-edit-route]").forEach((button) => button.onclick = () => { editingRoute = Number(button.dataset.editRoute); const route = data.routes[editingRoute]; const entries = routeRuleEntries(data, route); let previousGroup = null; const renderEntry = (entry, index) => { const group = ruleGroupName(route, entry); const heading = group === previousGroup ? "" : `<h3 class="drawer-group">${escapeHtml(group)}</h3>`; previousGroup = group; return `${heading}<div class="drawer-item"><span>${entry.kind}</span><input aria-label="${escapeHtml(route.name)} ${entry.kind} ${index + 1}" data-drawer-value="${index}" data-drawer-kind="${entry.kind}" value="${escapeHtml(entry.value)}"><select aria-label="${escapeHtml(entry.value)} 导向节点组" data-drawer-target="${index}" ${entry.kind !== "域名" ? "disabled" : ""}>${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${entry.target === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></div>`; }; document.querySelector("#drawer-title").textContent = `${route.name} · 规则列表`; document.querySelector("#drawer-items").innerHTML = entries.map(renderEntry).join(""); document.querySelector("#drawer-backdrop").classList.remove("hidden"); document.querySelector("#domain-drawer").classList.remove("hidden"); document.querySelector("#domain-drawer").classList.add("open"); document.querySelector("#domain-drawer").setAttribute("aria-hidden", "false"); });
+    document.querySelectorAll("[data-edit-route]").forEach((button) => button.onclick = () => {
+      editingRoute = Number(button.dataset.editRoute);
+      const route = data.routes[editingRoute];
+      const lan = isLanRoute(route);
+      const entries = routeRuleEntries(data, route);
+      let previousGroup = null;
+      const renderEntry = (entry, index) => {
+        const group = ruleGroupName(route, entry);
+        const heading = group === previousGroup ? "" : `<h3 class="drawer-group">${escapeHtml(group)}</h3>`;
+        previousGroup = group;
+        return `${heading}<div class="drawer-item drawer-item-plain"><span>${entry.kind}</span><input aria-label="${escapeHtml(route.name)} ${entry.kind} ${index + 1}" data-drawer-value="${index}" data-drawer-kind="${entry.kind}" value="${escapeHtml(entry.value)}"></div>`;
+      };
+      document.querySelector("#drawer-title").textContent = lan ? `${route.name} · 地址列表` : `${route.name} · 规则列表`;
+      document.querySelector("#domain-drawer > p").textContent = lan ? "始终直连；只需维护地址列表。" : "分流方向由策略组统一决定，这里只维护匹配列表。";
+      document.querySelector("#drawer-items").innerHTML = entries.map(renderEntry).join("");
+      document.querySelector("#drawer-backdrop").classList.remove("hidden");
+      document.querySelector("#domain-drawer").classList.remove("hidden");
+      document.querySelector("#domain-drawer").classList.add("open");
+      document.querySelector("#domain-drawer").setAttribute("aria-hidden", "false");
+    });
   };
   renderRoutes();
   const renderStandalone = () => { document.querySelector("#standalone-options").innerHTML = (data.standalone_urls || []).map((item, index) => `<div class="standalone-row"><input aria-label="网址名称" data-standalone-name="${index}" value="${escapeHtml(item.name)}"><input aria-label="网址" data-standalone-domain="${index}" value="${escapeHtml(item.domain)}"><select aria-label="目标节点组" data-standalone-target="${index}">${Object.entries(data.targets).map(([key, name]) => `<option value="${key}" ${item.target === key ? "selected" : ""}>${name}</option>`).join("")}</select><button type="button" data-remove-standalone="${index}">删除</button></div>`).join(""); document.querySelectorAll("[data-standalone-name]").forEach((input) => input.oninput = () => { data.standalone_urls[input.dataset.standaloneName].name = input.value; }); document.querySelectorAll("[data-standalone-domain]").forEach((input) => input.oninput = () => { data.standalone_urls[input.dataset.standaloneDomain].domain = input.value.trim(); }); document.querySelectorAll("[data-standalone-target]").forEach((select) => select.onchange = () => { data.standalone_urls[select.dataset.standaloneTarget].target = select.value; }); document.querySelectorAll("[data-remove-standalone]").forEach((button) => button.onclick = () => { data.standalone_urls.splice(Number(button.dataset.removeStandalone), 1); renderStandalone(); }); };
   renderStandalone();
   document.querySelector("#add-standalone").onclick = () => { data.standalone_urls ||= []; data.standalone_urls.push({ name: "新网址", domain: "example.com", target: "DIRECT" }); renderStandalone(); };
   const renderRules = () => { document.querySelector("#rule-options").innerHTML = (data.standalone_rules || []).map((item, index) => ({ item, index })).filter(({ item }) => !item.geoips?.length).map(({ item, index }) => { const type = item.cidrs?.length ? "cidrs" : "domains"; return `<div class="standalone-rule"><input aria-label="规则名称" data-rule-name="${index}" value="${escapeHtml(item.name)}"><select aria-label="规则类型" data-rule-type="${index}"><option value="cidrs" ${type === "cidrs" ? "selected" : ""}>CIDR / IP</option><option value="domains" ${type === "domains" ? "selected" : ""}>域名</option></select><textarea aria-label="规则值" data-rule-values="${index}" spellcheck="false">${escapeHtml((item[type] || []).join("\n"))}</textarea><select aria-label="目标节点组" data-rule-target="${index}">${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${item.target === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><button type="button" data-remove-rule="${index}">删除</button></div>`; }).join(""); };
-  const renderGeoipRules = () => { document.querySelector("#geoip-options").innerHTML = (data.standalone_rules || []).map((item, index) => ({ item, index })).filter(({ item }) => item.geoips?.length).map(({ item, index }) => `<div class="standalone-rule geoip-rule"><input aria-label="GeoIP 规则名称" data-rule-name="${index}" value="${escapeHtml(item.name)}"><textarea aria-label="GeoIP 规则值" data-rule-values="${index}" data-rule-type="geoips" spellcheck="false">${escapeHtml(item.geoips.join("\n"))}</textarea><select aria-label="GeoIP 目标节点组" data-rule-target="${index}">${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${item.target === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><button type="button" data-remove-rule="${index}">删除</button></div>`).join(""); };
-  const syncRule = (index) => { const area = document.querySelector(`[data-rule-values="${index}"]`); const type = document.querySelector(`[data-rule-type="${index}"]`)?.value || "geoips"; data.standalone_rules[index][type] = area.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean); };
-  const renderRuleLists = () => { renderRules(); renderGeoipRules(); document.querySelectorAll("[data-rule-name]").forEach((input) => input.oninput = () => { data.standalone_rules[input.dataset.ruleName].name = input.value; }); document.querySelectorAll("[data-rule-target]").forEach((select) => select.onchange = () => { data.standalone_rules[select.dataset.ruleTarget].target = select.value; }); document.querySelectorAll("[data-remove-rule]").forEach((button) => button.onclick = () => { data.standalone_rules.splice(Number(button.dataset.removeRule), 1); renderRuleLists(); }); };
-  data.standalone_rules ||= []; renderRuleLists();
-  document.querySelectorAll("#rule-options, #geoip-options").forEach((container) => { container.oninput = (event) => { if (event.target.matches("[data-rule-values]")) syncRule(Number(event.target.dataset.ruleValues)); }; container.onchange = (event) => { if (event.target.matches("[data-rule-type]")) renderRuleLists(); }; });
+  const renderGeoipRules = () => {
+    document.querySelector("#geoip-options").innerHTML = (data.standalone_rules || []).map((item, index) => ({ item, index })).filter(({ item }) => item.geoips?.length).map(({ item, index }) => {
+      const code = item.geoips[0] || "CN";
+      return `<div class="geoip-row"><select aria-label="国家代码" data-geoip-code="${index}">${geoipOptions(code)}</select><select aria-label="GeoIP 目标节点组" data-rule-target="${index}">${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${item.target === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><button type="button" data-remove-rule="${index}">删除</button></div>`;
+    }).join("");
+  };
+  const syncRule = (index) => { const area = document.querySelector(`[data-rule-values="${index}"]`); const type = document.querySelector(`[data-rule-type="${index}"]`)?.value || "domains"; data.standalone_rules[index][type] = area.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean); };
+  const renderRuleLists = () => {
+    renderRules();
+    renderGeoipRules();
+    document.querySelectorAll("[data-rule-name]").forEach((input) => input.oninput = () => { data.standalone_rules[input.dataset.ruleName].name = input.value; });
+    document.querySelectorAll("[data-geoip-code]").forEach((select) => select.onchange = () => {
+      const item = data.standalone_rules[select.dataset.geoipCode];
+      const code = select.value.toUpperCase();
+      item.geoips = [code];
+      item.name = geoipName(code);
+    });
+    document.querySelectorAll("[data-rule-target]").forEach((select) => select.onchange = () => { data.standalone_rules[select.dataset.ruleTarget].target = select.value; });
+    document.querySelectorAll("[data-remove-rule]").forEach((button) => button.onclick = () => { data.standalone_rules.splice(Number(button.dataset.removeRule), 1); renderRuleLists(); });
+  };
+  data.standalone_rules = (data.standalone_rules || []).flatMap((item) => {
+    if (!item.geoips?.length) return [item];
+    return item.geoips.map((code) => ({ name: geoipName(code), target: item.target, geoips: [String(code).toUpperCase()] }));
+  });
+  renderRuleLists();
+  document.querySelector("#rule-options").oninput = (event) => { if (event.target.matches("[data-rule-values]")) syncRule(Number(event.target.dataset.ruleValues)); };
+  document.querySelector("#rule-options").onchange = (event) => { if (event.target.matches("[data-rule-type]")) renderRuleLists(); };
   document.querySelector("#add-rule").onclick = () => { data.standalone_rules.push({ name: "新规则", target: "DIRECT", cidrs: ["192.0.2.0/24"] }); renderRuleLists(); };
-  document.querySelector("#add-geoip").onclick = () => { data.standalone_rules.push({ name: "新 GeoIP 规则", target: "DIRECT", geoips: ["CN"] }); renderRuleLists(); };
+  document.querySelector("#add-geoip").onclick = () => { data.standalone_rules.push({ name: geoipName("CN"), target: "DIRECT", geoips: ["CN"] }); renderRuleLists(); };
   document.querySelector("#add-route").onclick = () => { data.routes.push({ name: `新策略 ${data.routes.length + 1}`, target: "DIRECT", domains: [], keywords: [] }); renderRoutes(); };
-  document.querySelector("#save-domains").onclick = () => { if (editingRoute === null) return; const route = data.routes[editingRoute]; const values = [...document.querySelectorAll("[data-drawer-value]")]; const targets = [...document.querySelectorAll("[data-drawer-target]")]; const entries = values.map((input, index) => ({ kind: input.dataset.drawerKind, value: input.value.trim(), target: targets[index]?.value || route.target })).filter((entry) => entry.value); const domains = entries.filter((entry) => entry.kind === "域名"); route.domain_sets = []; route.domains = domains.map((entry) => entry.value); route.domain_targets = domains.map((entry) => entry.target); route.cidrs = entries.filter((entry) => entry.kind === "IP/CIDR").map((entry) => entry.value); route.geoips = entries.filter((entry) => entry.kind === "GeoIP").map((entry) => entry.value); delete route._domainTargets; document.querySelector("#drawer-backdrop").click(); renderRoutes(); };
+  document.querySelector("#save-domains").onclick = () => {
+    if (editingRoute === null) return;
+    const route = data.routes[editingRoute];
+    const entries = [...document.querySelectorAll("[data-drawer-value]")].map((input) => ({ kind: input.dataset.drawerKind, value: input.value.trim() })).filter((entry) => entry.value);
+    route.domain_sets = [];
+    route.domains = entries.filter((entry) => entry.kind === "域名").map((entry) => entry.value);
+    route.cidrs = entries.filter((entry) => entry.kind === "IP/CIDR").map((entry) => entry.value);
+    route.geoips = entries.filter((entry) => entry.kind === "GeoIP").map((entry) => entry.value);
+    if (route.name === "局域网直连") route.target = "DIRECT";
+    delete route.domain_targets;
+    delete route._domainTargets;
+    document.querySelector("#drawer-backdrop").click();
+    renderRoutes();
+  };
   document.querySelector("#close-drawer").onclick = () => document.querySelector("#drawer-backdrop").click();
   document.querySelector("#drawer-backdrop").onclick = () => { document.querySelector("#drawer-backdrop").classList.add("hidden"); document.querySelector("#domain-drawer").classList.add("hidden"); document.querySelector("#domain-drawer").classList.remove("open"); document.querySelector("#domain-drawer").setAttribute("aria-hidden", "true"); };
   document.querySelector("#group-interval").value = data.groups[0]?.interval ?? 30;
@@ -243,32 +367,58 @@ function setupGenerator(data) {
   };
   const renderGroups = () => {
     groupOptions.innerHTML = data.groups.map((group, index) => `<div class="group-row" data-group="${index}">
-      <label><span>策略键</span><input readonly value="${escapeHtml(group.target)}"><small>稳定的规则引用名称</small></label>
       <label><span>显示名称</span><input data-display="${index}" value="${escapeHtml(data.targets[group.target] || group.target)}"><small>客户端显示的节点组名称</small></label>
       <label><span>节点名称正则</span><input data-field="pattern" value="${escapeHtml(group.pattern)}" placeholder="例如 新加坡|SG"><small>匹配节点名称后加入此组</small></label>
       <label><span>测速服务</span><select data-field="url">${Object.entries(speedTests).map(([name, url]) => `<option value="${url}" ${group.url === url ? "selected" : ""}>${name}</option>`).join("")}</select><small>用于判断节点连通性和延迟</small></label>
       <button type="button" data-remove-group="${index}">删除</button></div>`).join("");
+    groupOptions.querySelectorAll("[data-display]").forEach((input) => {
+      input.oninput = () => { data.targets[data.groups[input.dataset.display].target] = input.value; renderRoutes(); renderStandalone(); renderRuleLists(); };
+      input.onchange = () => {
+        const group = data.groups[input.dataset.display];
+        data.targets[group.target] = input.value.trim() || "未命名节点组";
+        syncGroupKeys(data);
+        renderGroups();
+        renderRoutes();
+        renderStandalone();
+        renderRuleLists();
+      };
+    });
     groupOptions.querySelectorAll("[data-remove-group]").forEach((button) => button.onclick = () => { const index = Number(button.dataset.removeGroup); const removed = data.groups[index]; data.groups.splice(index, 1); delete data.targets[removed.target]; data.routes.forEach((route) => { if (route.target === removed.target) route.target = "DIRECT"; }); data.standalone_urls?.forEach((item) => { if (item.target === removed.target) item.target = "DIRECT"; }); data.standalone_rules?.forEach((item) => { if (item.target === removed.target) item.target = "DIRECT"; }); data.groups.forEach((group) => { if (group.fallback === removed.target) group.fallback = "DIRECT"; }); if (data.final === removed.target) data.final = "DIRECT"; renderGroups(); renderRoutes(); renderStandalone(); renderRuleLists(); });
   };
+  syncGroupKeys(data);
   renderGroups();
   renderDns();
-  document.querySelector("#add-group").onclick = () => { let n = data.groups.length + 1; let target = `GROUP_${n}`; while (data.targets[target]) target = `GROUP_${++n}`; data.targets[target] = target; data.groups.push({ target, pattern: "(节点|Node)", flags: "i", url: speedTests.Gstatic, interval: 30, tolerance: 10, fallback: "DIRECT" }); renderGroups(); renderRoutes(); renderStandalone(); renderRuleLists(); };
+  document.querySelector("#add-group").onclick = () => {
+    const display = `新节点组 ${data.groups.length + 1}`;
+    const target = allocateGroupKey(data, display);
+    data.targets[target] = display;
+    data.groups.push({ target, pattern: "(节点|Node)", flags: "i", url: speedTests.Gstatic, interval: 30, tolerance: 10, fallback: "DIRECT" });
+    renderGroups();
+    renderRoutes();
+    renderStandalone();
+    renderRuleLists();
+  };
   document.querySelector("#generate-button").onclick = () => {
-    source = JSON.parse(JSON.stringify(data));
     groupOptions.querySelectorAll(".group-row").forEach((row) => {
-      const group = source.groups[Number(row.dataset.group)];
+      const group = data.groups[Number(row.dataset.group)];
       row.querySelectorAll("[data-field]").forEach((input) => { group[input.dataset.field] = input.value; });
-      const display = row.querySelector("[data-display]"); if (display) source.targets[group.target] = display.value.trim() || group.target;
+      const display = row.querySelector("[data-display]");
+      if (display) data.targets[group.target] = display.value.trim() || "未命名节点组";
       group.interval = Number(document.querySelector("#group-interval").value);
       group.tolerance = Number(document.querySelector("#group-tolerance").value);
-      group.flags ||= "i"; group.fallback ||= "DIRECT";
+      group.flags ||= "i";
+      group.fallback ||= "DIRECT";
     });
-    source.routes.forEach((route, index) => { const target = document.querySelector(`[data-target-route="${index}"]`); if (target) route.target = target.value; });
-    source.standalone_urls = data.standalone_urls || [];
-    source.standalone_rules = data.standalone_rules || [];
+    data.routes.forEach((route, index) => { const target = document.querySelector(`[data-target-route="${index}"]`); if (target) route.target = target.value; });
+    document.querySelectorAll("[data-rule-values]").forEach((area) => { const index = Number(area.dataset.ruleValues); const type = document.querySelector(`[data-rule-type="${index}"]`).value; data.standalone_rules[index][type] = area.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean); });
+    syncGroupKeys(data);
+    source = JSON.parse(JSON.stringify(data));
     source.routes = source.routes.filter((route) => route.enabled !== false);
-    document.querySelectorAll("[data-rule-values]").forEach((area) => { const index = Number(area.dataset.ruleValues); const type = document.querySelector(`[data-rule-type="${index}"]`).value; source.standalone_rules[index][type] = area.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean); });
     sourceEl.value = JSON.stringify(source, null, 2);
+    renderGroups();
+    renderRoutes();
+    renderStandalone();
+    renderRuleLists();
     render(); document.querySelector("#converter").classList.remove("hidden");
     document.querySelector("#converter").scrollIntoView({ behavior: "smooth", block: "start" });
   };
