@@ -10,16 +10,17 @@ const stub = new Proxy(function () {}, {
   apply: () => stub,
 });
 const app = new Function(
-  "document", "fetch", "navigator", "URL", "Blob",
-  `${read("app.js")}\nreturn { rules, validate, validCidr, normalizeStandaloneValue, renderClash, renderShadowrocket, syncGroupKeys, assetUrl };`,
-)(stub, () => Promise.reject(new Error("离线")), stub, URL, stub);
+  "document", "fetch", "navigator", "URL", "Blob", "location",
+  `${read("app.js")}\nreturn { rules, validate, validCidr, normalizeStandaloneValue, renderClash, renderShadowrocket, syncGroupKeys, assetUrl, pageDir };`,
+)(stub, () => Promise.reject(new Error("离线")), stub, URL, stub, {
+  pathname: "/repo",
+  origin: "https://example.github.io",
+  href: "https://example.github.io/repo",
+});
 
-// Safari / GitHub Pages：相对 app.js 才能在无尾斜杠地址上找对文件
-assert.equal(
-  new URL("rules-source.json", "https://example.github.io/repo/app.js").href,
-  "https://example.github.io/repo/rules-source.json",
-);
-assert.equal(app.assetUrl("rules-source.json"), "rules-source.json");
+// Safari / GitHub Pages：/repo（无尾斜杠）也要落到 /repo/rules-source.json
+assert.equal(app.pageDir(), "/repo/");
+assert.equal(app.assetUrl("rules-source.json"), "https://example.github.io/repo/rules-source.json");
 
 const fixture = () => JSON.parse(read("rules-source.json"));
 const data = fixture();

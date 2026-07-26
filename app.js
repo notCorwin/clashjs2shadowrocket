@@ -2,9 +2,17 @@ const outputEl = document.querySelector("#output");
 const outputStatusEl = document.querySelector("#output-status");
 const summaryEl = document.querySelector("#summary");
 const generatorStatusEl = document.querySelector("#generator-status");
-// Safari 在 /repo（无尾斜杠）时会把相对路径解析到站点根；相对 app.js 定位可避开
-const scriptSrc = typeof document.currentScript?.src === "string" ? document.currentScript.src : "";
-const assetUrl = (name) => (scriptSrc ? new URL(name, scriptSrc).href : name);
+// Safari 在 /repo（无尾斜杠）时会把相对路径解析到站点根；按页面目录拼绝对 URL
+function pageDir() {
+  if (typeof location === "undefined") return "/";
+  let path = location.pathname;
+  if (!path.endsWith("/")) {
+    const last = path.split("/").pop();
+    path = last.includes(".") ? path.slice(0, -last.length) : `${path}/`;
+  }
+  return path;
+}
+const assetUrl = (name) => (typeof location === "undefined" ? name : new URL(name, `${location.origin}${pageDir()}`).href);
 let source = null;
 let outputType = "clash";
 let flushGenerator = null;
@@ -61,7 +69,7 @@ function syncGroupKeys(data) {
     data.targets[item.to] = item.display;
   }
   if (Object.keys(remap).length) mapTargetRefs(data, remap);
-  data.targets.DIRECT ||= "DIRECT";
+  if (!data.targets.DIRECT) data.targets.DIRECT = "DIRECT";
 }
 function allocateGroupKey(data, display) {
   let key = targetKeyFromName(display);
@@ -289,8 +297,8 @@ function render() {
 async function loadDefault() {
   const url = assetUrl("rules-source.json");
   try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const response = await fetch(url, { cache: "no-cache" });
+    if (!response.ok) throw new Error(`HTTP ${response.status} @ ${url}`);
     source = await response.json();
     validate(source);
     setupGenerator(source);
@@ -303,7 +311,7 @@ async function loadDefault() {
 }
 
 function setupGenerator(data) {
-  data.standalone_urls ||= [];
+  if (!data.standalone_urls) data.standalone_urls = [];
   data.standalone_rules = (data.standalone_rules || []).flatMap((item) => {
     if (item.geoips?.length) return item.geoips.map((code) => ({ name: geoipName(code), target: item.target, geoips: [String(code).toUpperCase()] }));
     const values = [...(item.domains || []), ...(item.cidrs || [])];
@@ -423,10 +431,10 @@ function setupGenerator(data) {
     if (event.key === "Escape") return closeDrawer();
     if (event.key !== "Tab") return;
     const focusable = [...drawer.querySelectorAll("button, input, select")];
-    const edge = event.shiftKey ? focusable[0] : focusable.at(-1);
+    const edge = event.shiftKey ? focusable[0] : focusable[focusable.length - 1];
     if (document.activeElement !== edge) return;
     event.preventDefault();
-    (event.shiftKey ? focusable.at(-1) : focusable[0]).focus();
+    (event.shiftKey ? focusable[focusable.length - 1] : focusable[0]).focus();
   };
   document.querySelector("#group-interval").value = data.groups[0]?.interval ?? 30;
   document.querySelector("#group-tolerance").value = data.groups[0]?.tolerance ?? 10;
@@ -498,8 +506,8 @@ function setupGenerator(data) {
       if (display) data.targets[group.target] = display.value.trim() || "未命名节点组";
       group.interval = Number(document.querySelector("#group-interval").value);
       group.tolerance = Number(document.querySelector("#group-tolerance").value);
-      group.flags ||= "i";
-      group.fallback ||= "DIRECT";
+      if (!group.flags) group.flags = "i";
+      if (!group.fallback) group.fallback = "DIRECT";
     });
     data.routes.forEach((route, index) => { const target = document.querySelector(`[data-target-route="${index}"]`); if (target) route.target = target.value; });
     data.standalone_urls.forEach((item) => { item.domain = normalizeStandaloneValue(item.domain); });

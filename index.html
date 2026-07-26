@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="在浏览器中管理分流策略，生成 Mihomo 与 Shadowrocket 配置" />
     <title>Mihomo / Shadowrocket 分流策略管理</title>
+    <!-- Safari 在 /repo（无尾斜杠）时相对路径会解析到站点根；先钉死目录 -->
+    <script>
+      (() => {
+        let path = location.pathname;
+        if (!path.endsWith("/")) {
+          const last = path.split("/").pop();
+          path = last.includes(".") ? path.slice(0, -last.length) : `${path}/`;
+        }
+        const base = document.createElement("base");
+        base.href = path;
+        document.head.prepend(base);
+      })();
+    </script>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -35,7 +48,7 @@
         </div>
       </section>
 
-      <footer><span id="summary">—</span><a href="https://github.com/nowaywastaken/clashjs2shadowrocket" target="_blank" rel="noreferrer">项目源码 ↗</a></footer>
+      <footer><span id="summary">—</span><a href="https://github.com/notCorwin/clashjs2shadowrocket" target="_blank" rel="noreferrer">项目源码 ↗</a></footer>
     </main>
     <script src="app.js"></script>
   </body>
