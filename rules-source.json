@@ -107,7 +107,7 @@
     },
     {
       "name": "KOOK",
-      "target": "SEA",
+      "target": "DIRECT",
       "domains": ["kookapp.cn", "kaiheila.cn", "agora.io"]
     },
     {
