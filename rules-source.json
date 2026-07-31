@@ -157,6 +157,11 @@
         "fc00::/7",
         "fe80::/10"
       ]
+    },
+    {
+      "name": "IPv4直连",
+      "target": "DIRECT",
+      "cidrs": ["0.0.0.0/0"]
     }
   ],
   "standalone_urls": [

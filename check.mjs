@@ -29,6 +29,13 @@ const ruleLines = (source) => app.rules(source, "MATCH").map(([rule]) => rule);
 // 出厂规则源必须自洽
 app.validate(data);
 
+// 所有 IPv4 地址单独作为基础直连规则，并排在具体网址规则之后，避免截住 OpenRouter 等域名分流
+const ipv4Route = data.routes.find((route) => route.name === "IPv4直连");
+assert.deepEqual(ipv4Route, { name: "IPv4直连", target: "DIRECT", cidrs: ["0.0.0.0/0"] });
+const ipv4Rule = "IP-CIDR,0.0.0.0/0,DIRECT,no-resolve";
+const openRouterRule = "DOMAIN-SUFFIX,openrouter.ai,🌏 东南节点";
+assert.ok(ruleLines(data).indexOf(openRouterRule) < ruleLines(data).indexOf(ipv4Rule), "IPv4 全量直连规则不能截住具体网址规则");
+
 // IPv6 网段要用 IP-CIDR6，两个客户端都不认 IP-CIDR 带 IPv6
 const withV6 = fixture();
 withV6.routes.push({ name: "IPv6", target: "DIRECT", cidrs: ["fc00::/7", "10.1.0.0/16"] });
@@ -66,7 +73,7 @@ for (const rule of ruleLines(data)) {
   if (kind === "IP-CIDR" && privateIp.test(value)) assert.equal(target, "DIRECT", `私有地址 ${value} 不该指向 ${target}`);
 }
 
-// 直连/节点 DNS 与经代理 DNS 必须分开；节点解析绝不能依赖 1.1.1.1
+// 直连/节点 DNS 与经代理 DNS 必须分开；国内侧默认使用 System
 assert.ok(data.dns?.overseas?.length && data.dns?.domestic?.length, "应展开默认 DNS 列表");
 assert.notDeepEqual(data.dns.overseas, data.dns.domestic);
 assert.notDeepEqual(data.mihomo_dns["direct-nameserver"], data.mihomo_dns.nameserver);
@@ -81,9 +88,9 @@ assert.equal(bare.mihomo_dns, undefined);
 assert.equal(bare.shadowrocket_dns, undefined);
 app.validate(bare);
 assert.deepEqual(bare.dns.overseas, ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"]);
-assert.deepEqual(bare.dns.domestic, ["https://223.5.5.5/dns-query", "https://1.12.0.2/dns-query"]);
+assert.deepEqual(bare.dns.domestic, ["system"]);
 assert.deepEqual(bare.mihomo_dns["proxy-server-nameserver"], bare.dns.domestic);
-assert.match(app.renderShadowrocket(bare), /^dns-server = https:\/\/223\.5\.5\.5\/dns-query,/m);
+assert.match(app.renderShadowrocket(bare), /^dns-server = system$/m);
 
 for (const [value, expected] of [["1.2.3.4/32", true], ["1.2.3.4", false], ["256.0.0.1/8", false], ["10.0.0.0/33", false], ["1.2.3.4/8/8", false], ["2001:db8::/32", true], ["2001:db8::/129", false]]) {
   assert.equal(app.validCidr(value), expected, `validCidr(${value})`);

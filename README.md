@@ -33,6 +33,6 @@ node check.mjs
 `rules-source.json` 不写完整 DNS。生成时用内置默认值展开，页面上也只暴露两份列表：
 
 - **国外 DoH（经代理查询）**：Clash 的 `nameserver`，Shadowrocket 的 `proxy-dns-server`。默认 `1.1.1.1` + `8.8.8.8` 的 IP 形式 DoH。不要拿它解析节点域名——在国内往往要先翻墙才能访问这些 DoH。
-- **国内 DoH（节点与直连）**：Clash 的 `proxy-server-nameserver` / `direct-nameserver`，Shadowrocket 的 `dns-server` / `fallback-dns-server`（默认阿里 / DNSPod IP 形式 DoH）。节点主机名必须在建连前直连解析；Shadowrocket 直连域名另用 `dns-direct-system = true` 走系统 DNS。
+- **国内 DNS（System）**：Clash 的 `proxy-server-nameserver` / `direct-nameserver` 和 Shadowrocket 的 `dns-server` / `fallback-dns-server` 默认使用 `system`；Shadowrocket 同时用 `dns-direct-system = true` 解析直连域名。
 
 其余项（fake-ip 过滤、`hijack-dns`、bootstrap nameserver 等）固定用代码里的防污染默认值，不必写进规则源。

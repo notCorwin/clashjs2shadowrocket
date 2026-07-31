@@ -17,11 +17,12 @@ let source = null;
 let outputType = "clash";
 let flushGenerator = null;
 const LAN_ROUTE = "局域网直连";
-const routeDescriptions = { Apple: "Apple 服务直连", AI: "ChatGPT、Gemini、Claude、Grok、Cursor、Copilot 等 AI 服务", LINE: "LINE 服务", Netflix: "Netflix 与 Fast.com", YouTube: "YouTube 视频服务", TikTok: "TikTok 短视频服务", Google: "Google 服务", GitHub: "GitHub 与资源域名", "局域网直连": "局域网、保留地址与特殊网段" };
+const IPV4_ROUTE = "IPv4直连";
+const routeDescriptions = { Apple: "Apple 服务直连", AI: "ChatGPT、Gemini、Claude、Grok、Cursor、Copilot 等 AI 服务", LINE: "LINE 服务", Netflix: "Netflix 与 Fast.com", YouTube: "YouTube 视频服务", TikTok: "TikTok 短视频服务", Google: "Google 服务", GitHub: "GitHub 与资源域名", "局域网直连": "局域网、保留地址与特殊网段", "IPv4直连": "所有 IPv4 地址固定直连" };
 // 国外 DoH 用 IP，避免解析 DoH 域名时再被污染。
-// 节点域名必须在翻墙前解析，只能走国内 DoH（1.1.1.1 本身往往要翻墙才能到）。
+// 节点域名和直连域名使用系统 DNS，不额外依赖国内 DoH。
 const defaultOverseasDns = ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"];
-const defaultDomesticDns = ["https://223.5.5.5/dns-query", "https://1.12.0.2/dns-query"];
+const defaultDomesticDns = ["system"];
 const defaultFakeIpFilter = ["*.lan", "*.local", "*.localhost", "+.internal", "+.home.arpa", "+.arpa", "time.*.com", "ntp.*.com", "+.stun.*", "stun.*", "*.msftconnecttest.com", "www.msftconnecttest.com"];
 const defaultHijackDns = ["8.8.8.8:53", "8.8.4.4:53", "1.1.1.1:53", "1.0.0.1:53", "223.5.5.5:53", "119.29.29.29:53"];
 const defaultAlwaysRealIp = ["*.lan", "*.local", "*.arpa", "time.*.com", "ntp.*.com", "www.msftconnecttest.com"];
@@ -132,10 +133,12 @@ function expandStandaloneUrl(item) {
 const cidrRule = (value, target) => `IP-CIDR${value.includes(":") ? "6" : ""},${value},${target},no-resolve`;
 
 function expandedRoutes(data) {
+  const routes = data.routes.filter((route) => route.enabled !== false).map((route) => ({ ...route, enabled: undefined, domain_sets: undefined, domains: routeDomains(data, route) }));
   return [
-    ...data.routes.filter((route) => route.enabled !== false).map((route) => ({ ...route, enabled: undefined, domain_sets: undefined, domains: routeDomains(data, route) })),
+    ...routes.filter((route) => route.name !== IPV4_ROUTE),
     ...(data.standalone_urls || []).map(expandStandaloneUrl),
     ...(data.standalone_rules || []),
+    ...routes.filter((route) => route.name === IPV4_ROUTE),
   ];
 }
 
@@ -201,7 +204,7 @@ function resolveDnsLists(data) {
   };
 }
 
-// 规则源只保留海外/国内两份列表；其余用防污染默认值展开给两个客户端
+// 规则源只保留海外 DoH / 国内 System 两份列表；其余用防污染默认值展开给两个客户端
 function ensureDns(data) {
   const { overseas, domestic } = resolveDnsLists(data);
   data.dns = { overseas: [...overseas], domestic: [...domestic] };
@@ -231,7 +234,7 @@ function ensureDns(data) {
     dns_direct_system: true,
     dns_direct_fallback_proxy: true,
     hijack_dns: [...defaultHijackDns],
-    // dns-server 直连解析（含节点域名）；proxy-dns-server 走代理后再查，可用国外 DoH
+    // dns-server 使用系统 DNS 解析节点与直连域名；proxy-dns-server 走代理后再查，可用国外 DoH
     servers: data.dns.domestic,
     fallback_servers: data.dns.domestic,
     proxy_servers: data.dns.overseas,
@@ -326,6 +329,8 @@ function setupGenerator(data) {
   const drawer = document.querySelector("#domain-drawer");
   const backdrop = document.querySelector("#drawer-backdrop");
   const isLanRoute = (route) => route.name === LAN_ROUTE;
+  const isIpv4Route = (route) => route.name === IPV4_ROUTE;
+  const isFixedDirectRoute = (route) => isLanRoute(route) || isIpv4Route(route);
   const renderRoutes = () => {
     const enabledBox = (route, index) => `<input type="checkbox" aria-label="启用 ${escapeHtml(route.name)}" data-route="${index}" ${route.enabled !== false ? "checked" : ""}>`;
     const targetSelect = (selected, label, attribute, index) => `<select ${attribute}="${index}" aria-label="${escapeHtml(label)}">${Object.entries(data.targets).map(([key, name]) => `<option value="${escapeHtml(key)}" ${selected === key ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select>`;
@@ -343,9 +348,12 @@ function setupGenerator(data) {
     };
     const routes = data.routes.map((route, index) => ({ route, index }));
     const baseRoutes = routes.filter(({ route }) => isLanRoute(route));
-    document.querySelector("#route-options").innerHTML = routes.filter(({ route }) => !isLanRoute(route)).map(({ route, index }) => renderRoute(route, index)).join("");
+    const ipv4Routes = routes.filter(({ route }) => isIpv4Route(route));
+    document.querySelector("#route-options").innerHTML = routes.filter(({ route }) => !isLanRoute(route) && !isIpv4Route(route)).map(({ route, index }) => renderRoute(route, index)).join("");
     document.querySelector("#base-rule-options").innerHTML = baseRoutes.map(({ route, index }) => renderBaseRoute(route, index)).join("");
     document.querySelector("#base-rule-section").classList.toggle("hidden", !baseRoutes.length);
+    document.querySelector("#ipv4-rule-options").innerHTML = ipv4Routes.map(({ route, index }) => renderBaseRoute(route, index)).join("");
+    document.querySelector("#ipv4-rule-section").classList.toggle("hidden", !ipv4Routes.length);
     document.querySelectorAll("[data-route]").forEach((input) => input.onchange = () => { data.routes[input.dataset.route].enabled = input.checked; });
     document.querySelectorAll("[data-target-route]").forEach((select) => select.onchange = () => { data.routes[select.dataset.targetRoute].target = select.value; });
     document.querySelectorAll("[data-remove-route]").forEach((button) => button.onclick = () => { data.routes.splice(Number(button.dataset.removeRoute), 1); editingRoute = null; renderRoutes(); });
@@ -353,7 +361,7 @@ function setupGenerator(data) {
       editingRoute = Number(button.dataset.editRoute);
       drawerTrigger = button;
       const route = data.routes[editingRoute];
-      const lan = isLanRoute(route);
+      const fixedDirect = isFixedDirectRoute(route);
       let previousGroup = null;
       const renderEntry = (entry, index) => {
         const group = ruleGroupName(route, entry);
@@ -361,8 +369,8 @@ function setupGenerator(data) {
         previousGroup = group;
         return heading + ruleRow(entry.kind, entry.value, `${route.name} ${entry.kind} ${index + 1}`);
       };
-      document.querySelector("#drawer-title").textContent = lan ? `${route.name} · 地址列表` : `${route.name} · 规则列表`;
-      document.querySelector("#domain-drawer > p").textContent = lan ? "始终直连；只需维护地址列表。" : "分流方向由策略组统一决定，这里只维护匹配列表。";
+      document.querySelector("#drawer-title").textContent = fixedDirect ? `${route.name} · 地址列表` : `${route.name} · 规则列表`;
+      document.querySelector("#domain-drawer > p").textContent = fixedDirect ? "始终直连；只需维护地址列表。" : "分流方向由策略组统一决定，这里只维护匹配列表。";
       document.querySelector("#drawer-items").innerHTML = routeRuleEntries(data, route).map(renderEntry).join("");
       backdrop.classList.remove("hidden");
       drawer.classList.remove("hidden");
@@ -424,7 +432,7 @@ function setupGenerator(data) {
     route.keywords = pick("关键词");
     route.cidrs = pick("IP/CIDR");
     route.geoips = pick("GeoIP");
-    if (isLanRoute(route)) route.target = "DIRECT";
+    if (isFixedDirectRoute(route)) route.target = "DIRECT";
     closeDrawer();
     renderRoutes();
   };
@@ -454,9 +462,9 @@ function setupGenerator(data) {
   const renderDns = () => {
     ensureDns(data);
     dnsOptions.innerHTML = `<div class="dns-card dns-card-simple"><h3>DNS 分工</h3>
-      <p class="section-help">节点域名和直连域名必须用国内 DoH（建连前不能依赖 1.1.1.1）；代理流量侧再用国外 DoH 防污染。其余选项用内置默认值。</p>
+      <p class="section-help">节点域名和直连域名使用系统 DNS；代理流量侧再用国外 DoH 防污染。其余选项用内置默认值。</p>
       <label><span>国外 DoH（经代理查询）</span><textarea id="overseas-dns-servers" spellcheck="false">${escapeHtml(data.dns.overseas.join("\n"))}</textarea><small>每行一个；Clash nameserver / Shadowrocket proxy-dns-server。用 IP 形式 DoH。</small></label>
-      <label><span>国内 DoH（节点与直连）</span><textarea id="domestic-dns-servers" spellcheck="false">${escapeHtml(data.dns.domestic.join("\n"))}</textarea><small>每行一个；解析代理节点域名，以及直连站点。Shadowrocket 直连仍可走系统 DNS。</small></label>
+      <label><span>国内 DNS（System）</span><textarea id="domestic-dns-servers" spellcheck="false">${escapeHtml(data.dns.domestic.join("\n"))}</textarea><small>默认使用 system；解析代理节点域名，以及直连站点。</small></label>
     </div>`;
     const overseasArea = document.querySelector("#overseas-dns-servers");
     const domesticArea = document.querySelector("#domestic-dns-servers");
